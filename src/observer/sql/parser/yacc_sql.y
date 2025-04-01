@@ -88,6 +88,7 @@ UnboundAggregateExpr *create_aggregate_expression(const char *aggregate_name,
         INT_T
         STRING_T
         FLOAT_T
+        DATE_T // date
         VECTOR_T
         HELP
         EXIT
@@ -136,6 +137,7 @@ UnboundAggregateExpr *create_aggregate_expression(const char *aggregate_name,
 %token <floats> FLOAT
 %token <cstring> ID
 %token <cstring> SSS
+%token <cstring> DATE
 //非终结符
 
 /** type 定义了各种解析后的结果输出的是什么类型。类型对应了 union 中的定义的成员变量名称 **/
@@ -291,9 +293,11 @@ drop_index_stmt:      /*drop index 语句的语法解析树*/
 create_table_stmt:    /*create table 语句的语法解析树*/
     CREATE TABLE ID LBRACE attr_def attr_def_list RBRACE storage_format
     {
+      // $$ 表示返回值
       $$ = new ParsedSqlNode(SCF_CREATE_TABLE);
       CreateTableSqlNode &create_table = $$->create_table;
       create_table.relation_name = $3;
+      // 传递的是指针, 不进行拷贝:
       //free($3);
 
       vector<AttrInfoSqlNode> *src_attrs = $6;
@@ -304,6 +308,11 @@ create_table_stmt:    /*create table 语句的语法解析树*/
       }
       create_table.attr_infos.emplace_back(*$5);
       reverse(create_table.attr_infos.begin(), create_table.attr_infos.end());
+      // debug here
+      // for (auto &attr : create_table.attr_infos) {
+      //   printf("DEBUG: attr name: %s, type: %s, length: %d\n", attr.name.c_str(), attr_type_to_string(attr.type), (int)attr.length);
+      // }
+      // debug end
       delete $5;
       if ($8 != nullptr) {
         create_table.storage_format = $8;
@@ -328,6 +337,7 @@ attr_def_list:
     ;
     
 attr_def:
+    // number 表示长度
     ID type LBRACE number RBRACE 
     {
       $$ = new AttrInfoSqlNode;
@@ -351,6 +361,7 @@ type:
     | STRING_T { $$ = static_cast<int>(AttrType::CHARS); }
     | FLOAT_T  { $$ = static_cast<int>(AttrType::FLOATS); }
     | VECTOR_T { $$ = static_cast<int>(AttrType::VECTORS); }
+    | DATE_T   { $$ = static_cast<int>(AttrType::DATES); }
     ;
 insert_stmt:        /*insert   语句的语法解析树*/
     INSERT INTO ID VALUES LBRACE value value_list RBRACE 
@@ -394,6 +405,13 @@ value:
     |SSS {
       char *tmp = common::substr($1,1,strlen($1)-2);
       $$ = new Value(tmp);
+      free(tmp);
+    }
+    | DATE {
+      // cast happened in here, 先用字符串进行存储
+      char *tmp = common::substr($1,1,strlen($1)-2);
+      bool is_date = true;
+      $$ = new Value(tmp, is_date);
       free(tmp);
     }
     ;

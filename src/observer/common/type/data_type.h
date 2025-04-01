@@ -97,6 +97,6 @@ public:
 
 protected:
   AttrType attr_type_;
-
+  // MAXTYPE作为COUNT
   static array<unique_ptr<DataType>, static_cast<int>(AttrType::MAXTYPE)> type_instances_;
 };
