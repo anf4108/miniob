@@ -46,7 +46,8 @@ RC InsertStmt::create(Db *db, const InsertSqlNode &inserts, Stmt *&stmt)
     LOG_WARN("schema mismatch. value num=%d, field num in schema=%d", value_num, field_num);
     return RC::SCHEMA_FIELD_MISSING;
   }
-
+  // loop LOG_INFO
+  LOG_INFO("schema match. value num=%d, field num in schema=%d", value_num, field_num);
   // everything alright
   stmt = new InsertStmt(table, values, value_num);
   return RC::SUCCESS;

@@ -16,9 +16,10 @@ See the Mulan PSL v2 for more details. */
 
 #include "common/lang/string.h"
 #include "common/lang/memory.h"
+#include "common/lang/sstream.h"
 #include "common/type/attr_type.h"
 #include "common/type/data_type.h"
-
+#include "common/type/date_type.h"
 /**
  * @brief 属性的值
  * @ingroup DataType
@@ -35,7 +36,8 @@ public:
   friend class BooleanType;
   friend class CharType;
   friend class VectorType;
-
+  // add date type
+  friend class DateType;
   Value() = default;
 
   ~Value() { reset(); }
@@ -46,6 +48,8 @@ public:
   explicit Value(float val);
   explicit Value(bool val);
   explicit Value(const char *s, int len = 0);
+  // 标注下面为专门处理日期类型的构造函数
+  explicit Value(const char *s, bool is_date);
 
   Value(const Value &other);
   Value(Value &&other);
@@ -114,6 +118,7 @@ private:
   void set_int(int val);
   void set_float(float val);
   void set_string(const char *s, int len = 0);
+  void set_date(int val);
   void set_string_from_other(const Value &other);
 
 private:

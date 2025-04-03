@@ -26,9 +26,27 @@ RC CharType::set_value_from_str(Value &val, const string &data) const
   return RC::SUCCESS;
 }
 
+static bool check_valid_date(int y, int m, int d)
+{
+  static const int days[] = {0, 31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31};
+  bool             leap   = (y % 4 == 0 && y % 100 != 0) || y % 400 == 0;
+  return (y > 0 && y <= 9999) && (m > 0 && m <= 12) && (d > 0 && d <= (days[m] + (m == 2 && leap ? 1 : 0)));
+}
+
 RC CharType::cast_to(const Value &val, AttrType type, Value &result) const
 {
   switch (type) {
+    case AttrType::DATES: {
+      static int y, m, d;
+      if (sscanf(val.value_.pointer_value_, "%d-%d-%d", &y, &m, &d) != 3) {
+        return RC::INVALID_ARGUMENT;
+      }
+      if (!check_valid_date(y, m, d)) {
+        return RC::INVALID_ARGUMENT;
+      }
+      result.attr_type_ = AttrType::DATES;
+      result.set_date(y * 10000 + m * 100 + d);
+    } break;
     default: return RC::UNIMPLEMENTED;
   }
   return RC::SUCCESS;
@@ -38,6 +56,8 @@ int CharType::cast_cost(AttrType type)
 {
   if (type == AttrType::CHARS) {
     return 0;
+  } else if (type == AttrType::DATES) {
+    return 1;
   }
   return INT32_MAX;
 }
