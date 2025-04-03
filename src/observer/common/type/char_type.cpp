@@ -56,6 +56,8 @@ int CharType::cast_cost(AttrType type)
 {
   if (type == AttrType::CHARS) {
     return 0;
+  } else if (type == AttrType::DATES) {
+    return 1;
   }
   return INT32_MAX;
 }

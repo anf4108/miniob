@@ -21,7 +21,7 @@ See the Mulan PSL v2 for more details. */
 RC SqlTaskHandler::handle_event(Communicator *communicator)
 {
   SessionEvent *event = nullptr;
-  RC rc = communicator->read_event(event);
+  RC            rc    = communicator->read_event(event);
   if (OB_FAIL(rc)) {
     return rc;
   }
@@ -86,6 +86,6 @@ RC SqlTaskHandler::handle_sql(SQLStageEvent *sql_event)
     LOG_TRACE("failed to do execute. rc=%s", strrc(rc));
     return rc;
   }
-
+  LOG_INFO("execute stage done");
   return rc;
 }
