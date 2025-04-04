@@ -34,6 +34,7 @@ public:
 
   /**
    * Filter one record
+   * 条件过滤器，允许不同的条件过滤实现（比如单个条件、复合条件）。
    * @param rec
    * @return true means match condition, false means failed to match.
    */

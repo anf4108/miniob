@@ -466,6 +466,8 @@ select_stmt:        /*  select 语句的语法解析树*/
 
       if ($5 != nullptr) {
         $$->selection.conditions.swap(*$5);
+        // 左递归，需要倒置
+        reverse($$->selection.conditions.begin(), $$->selection.conditions.end());
         delete $5;
       }
 
@@ -586,63 +588,24 @@ condition_list:
     }
     | condition {
       $$ = new vector<ConditionSqlNode>;
-      $$->emplace_back(*$1);
+      $1->conjunction_type = ConjunctionType::NO_CONJUNCTION;
+      $$->emplace_back(std::move(*$1));
       delete $1;
     }
     | condition AND condition_list {
       $$ = $3;
-      $$->emplace_back(*$1);
+      $1->conjunction_type = ConjunctionType::CONJ_AND;
+      $$->emplace_back(std::move(*$1));
       delete $1;
     }
     ;
 condition:
-    rel_attr comp_op value
+    expression comp_op expression
     {
       $$ = new ConditionSqlNode;
-      $$->left_is_attr = 1;
-      $$->left_attr = *$1;
-      $$->right_is_attr = 0;
-      $$->right_value = *$3;
-      $$->comp = $2;
-
-      delete $1;
-      delete $3;
-    }
-    | value comp_op value 
-    {
-      $$ = new ConditionSqlNode;
-      $$->left_is_attr = 0;
-      $$->left_value = *$1;
-      $$->right_is_attr = 0;
-      $$->right_value = *$3;
-      $$->comp = $2;
-
-      delete $1;
-      delete $3;
-    }
-    | rel_attr comp_op rel_attr
-    {
-      $$ = new ConditionSqlNode;
-      $$->left_is_attr = 1;
-      $$->left_attr = *$1;
-      $$->right_is_attr = 1;
-      $$->right_attr = *$3;
-      $$->comp = $2;
-
-      delete $1;
-      delete $3;
-    }
-    | value comp_op rel_attr
-    {
-      $$ = new ConditionSqlNode;
-      $$->left_is_attr = 0;
-      $$->left_value = *$1;
-      $$->right_is_attr = 1;
-      $$->right_attr = *$3;
-      $$->comp = $2;
-
-      delete $1;
-      delete $3;
+      $$->comp_op = $2;
+      $$->left_expr = unique_ptr<Expression>($1);
+      $$->right_expr = unique_ptr<Expression>($3);  
     }
     ;
 

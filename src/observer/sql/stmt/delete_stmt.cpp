@@ -47,8 +47,12 @@ RC DeleteStmt::create(Db *db, const DeleteSqlNode &delete_sql, Stmt *&stmt)
   table_map.insert(pair<string, Table *>(string(table_name), table));
 
   FilterStmt *filter_stmt = nullptr;
-  RC          rc          = FilterStmt::create(
-      db, table, &table_map, delete_sql.conditions.data(), static_cast<int>(delete_sql.conditions.size()), filter_stmt);
+  // need const cast, maybe some bug??
+  RC rc = FilterStmt::create(
+      db, table, &table_map, const_cast<vector<ConditionSqlNode> &>(delete_sql.conditions), filter_stmt);
+  // RC          rc          = FilterStmt::create(
+  //     db, table, &table_map, delete_sql.conditions.data(), static_cast<int>(delete_sql.conditions.size()),
+  //     filter_stmt);
   if (rc != RC::SUCCESS) {
     LOG_WARN("failed to create filter statement. rc=%d:%s", rc, strrc(rc));
     return rc;
