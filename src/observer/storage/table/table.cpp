@@ -158,14 +158,15 @@ RC Table::drop()
     delete record_handler_;
     record_handler_ = nullptr;
   }
-
+  LOG_INFO("Try to remove index files of table %s", name());
   // 删除相关索引文件
   for (auto index : indexes_) {
+    LOG_INFO("Begin to drop index %s", index->index_meta().name());
     index->destroy();
     delete index;
     index = nullptr;
   }
-
+  indexes_.clear();
   return RC::SUCCESS;
 }
 

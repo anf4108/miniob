@@ -316,12 +316,13 @@ RC DiskBufferPool::close_file()
 
 RC DiskBufferPool::remove_file()
 {
-  RC rc = bp_manager_.remove_file(file_name_.c_str());
+  string file_name = file_name_;
+  RC     rc        = bp_manager_.remove_file(file_name_.c_str());
   if (rc != RC::SUCCESS) {
-    LOG_ERROR("Failed to remove file %s, rc=%s", file_name_, strrc(rc));
+    LOG_ERROR("Failed to remove file %s, rc=%s", file_name, strrc(rc));
     return rc;
   }
-  LOG_INFO("Successfully remove file %s.", file_name_);
+  LOG_INFO("Successfully remove file %s.", file_name);
   return RC::SUCCESS;
 }
 
