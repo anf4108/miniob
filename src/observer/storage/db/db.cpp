@@ -178,6 +178,27 @@ Table *Db::find_table(int32_t table_id) const
   return nullptr;
 }
 
+RC Db::drop_table(const char *table_name)
+{
+  auto iter = opened_tables_.find(table_name);
+  if (iter == opened_tables_.end()) {
+    LOG_ERROR("Table %s not found.", table_name);
+    return RC::SCHEMA_TABLE_NOT_EXIST;
+  }
+
+  Table *table = iter->second;
+  RC     rc    = table->drop();
+  if (rc != RC::SUCCESS) {
+    LOG_ERROR("Failed to drop table %s.", table_name);
+    return rc;
+  }
+
+  delete table;
+  opened_tables_.erase(iter);
+  LOG_INFO("Drop table success. table name=%s", table_name);
+  return rc;
+}
+
 RC Db::open_all_tables()
 {
   vector<string> table_meta_files;

@@ -19,6 +19,7 @@ See the Mulan PSL v2 for more details. */
 #include "common/lang/string.h"
 #include "common/lang/span.h"
 #include "common/lang/algorithm.h"
+#include "common/lang/filesystem.h"
 #include "common/log/log.h"
 #include "common/global_context.h"
 #include "storage/db/db.h"
@@ -125,6 +126,48 @@ RC Table::create(Db *db, int32_t table_id, const char *path, const char *name, c
 
   LOG_INFO("Successfully create table %s:%s", base_dir, name);
   return rc;
+}
+
+// 一些疑问?
+RC Table::drop()
+{
+  auto rc = sync();  // 刷新所有脏页
+  if (rc != RC::SUCCESS) {
+    return rc;
+  }
+
+  // 删除表的元数据文件
+  string meta_file = table_meta_file(base_dir_.c_str(), name());
+  if (::remove(meta_file.c_str()) != 0) {
+    LOG_ERROR("Failed to remove table meta file. file name=%s, errmsg=%s", meta_file.c_str(), strerror(errno));
+    return RC::IOERR_DELETE;
+  }
+
+  // 删除表的数据文件
+  string             data_file = table_data_file(base_dir_.c_str(), name());
+  BufferPoolManager &bpm       = db_->buffer_pool_manager();
+  // 删除bufferPoolManager中和record_handler_相关的文件
+  rc = bpm.remove_file(data_file.c_str());
+  if (rc != RC::SUCCESS) {
+    LOG_ERROR("Failed to remove table data file managed by disk buffer pool. file name=%s, errmsg=%s", data_file.c_str(), strrc(rc));
+    return rc;
+  }
+  data_buffer_pool_ = nullptr;
+
+  if (record_handler_ != nullptr) {
+    delete record_handler_;
+    record_handler_ = nullptr;
+  }
+  LOG_INFO("Try to remove index files of table %s", name());
+  // 删除相关索引文件
+  for (auto index : indexes_) {
+    LOG_INFO("Begin to drop index %s", index->index_meta().name());
+    index->destroy();
+    delete index;
+    index = nullptr;
+  }
+  indexes_.clear();
+  return RC::SUCCESS;
 }
 
 RC Table::open(Db *db, const char *meta_file, const char *base_dir)
@@ -272,7 +315,7 @@ RC Table::make_record(int value_num, const Value *values, Record &record)
 
   for (int i = 0; i < value_num && OB_SUCC(rc); i++) {
     const FieldMeta *field = table_meta_.field(i + normal_field_start_index);
-    const Value &    value = values[i];
+    const Value     &value = values[i];
     if (field->type() != value.attr_type()) {
       Value real_value;
       rc = Value::cast_to(value, field->type(), real_value);

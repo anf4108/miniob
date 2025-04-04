@@ -203,6 +203,10 @@ public:
   RC close_file();
 
   /**
+   * 删除分页文件
+   */
+  RC remove_file();
+  /**
    * 根据文件ID和页号获取指定页面到缓冲区，返回页面句柄指针。
    */
   RC get_this_page(PageNum page_num, Frame **frame);
@@ -329,6 +333,7 @@ public:
   RC create_file(const char *file_name);
   RC open_file(LogHandler &log_handler, const char *file_name, DiskBufferPool *&bp);
   RC close_file(const char *file_name);
+  RC remove_file(const char *file_name);
 
   RC flush_page(Frame &frame);
 
@@ -351,5 +356,5 @@ private:
   common::Mutex                            lock_;
   unordered_map<string, DiskBufferPool *>  buffer_pools_;
   unordered_map<int32_t, DiskBufferPool *> id_to_buffer_pools_;
-  atomic<int32_t>                          next_buffer_pool_id_{1};  // 系统启动时，会打开所有的表，这样就可以知道当前系统最大的ID是多少了
+  atomic<int32_t> next_buffer_pool_id_{1};  // 系统启动时，会打开所有的表，这样就可以知道当前系统最大的ID是多少了
 };
