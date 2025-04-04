@@ -928,7 +928,7 @@ RC BufferPoolManager::remove_file(const char *_file_name)
     // 析构 DiskBufferPool 对象时会自动关闭文件，这里手动关闭表示强调
     RC rc = bp->close_file();
     if (rc != RC::SUCCESS) {
-      LOG_ERROR("Failed to close file %s before removal, rc=%s", _file_name, strrc(rc));
+      LOG_ERROR("Failed to close file %s before removal, rc=%s", file_name, strrc(rc));
       delete bp;  // 即使关闭失败，也释放内存
       return rc;
     }
@@ -936,12 +936,12 @@ RC BufferPoolManager::remove_file(const char *_file_name)
   }
 
   // 删除磁盘上的文件
-  if (unlink(_file_name) != 0) {
-    LOG_ERROR("Failed to remove file %s from disk, due to %s", _file_name, strerror(errno));
+  if (unlink(file_name.c_str()) != 0) {
+    LOG_ERROR("Failed to remove file %s from disk, due to %s", file_name, strerror(errno));
     return RC::IOERR_DELETE;
   }
 
-  LOG_INFO("Successfully removed file %s from buffer pool and disk.", _file_name);
+  LOG_INFO("Successfully removed file %s from buffer pool and disk.", file_name);
   return RC::SUCCESS;
 }
 
