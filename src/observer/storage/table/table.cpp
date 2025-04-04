@@ -152,6 +152,7 @@ RC Table::drop()
     LOG_ERROR("Failed to remove table data file managed by disk buffer pool. file name=%s, errmsg=%s", data_file.c_str(), strrc(rc));
     return rc;
   }
+  data_buffer_pool_ = nullptr;
 
   if (record_handler_ != nullptr) {
     delete record_handler_;
