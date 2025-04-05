@@ -57,6 +57,12 @@ RC FilterStmt::create(Db *db, Table *default_table, std::unordered_map<std::stri
       case CompOp::GREAT_THAN: {
         unique_ptr<Expression> condition_expr(
             new ComparisonExpr(condition.comp_op, std::move(condition.left_expr), std::move(condition.right_expr)));
+        // 设置表达式名称
+        string name = std::string(dynamic_cast<ComparisonExpr *>(condition_expr.get())->left()->name()) + " ";
+        condition_expr->set_name(string(dynamic_cast<ComparisonExpr *>(condition_expr.get())->left()->name()) + " " +
+                                 comp_op_to_string(condition.comp_op) + " " +
+                                 dynamic_cast<ComparisonExpr *>(condition_expr.get())->right()->name());
+
         RC rc = expression_binder.bind_expression(condition_expr, bound_conditions);
         if (rc != RC::SUCCESS) {
           delete tmp_stmt;

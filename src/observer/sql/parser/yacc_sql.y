@@ -398,9 +398,17 @@ value:
       $$ = new Value((int)$1);
       @$ = @1;
     }
+    | '-' NUMBER {
+      $$ = new Value(-(int)$2);
+      @$ = @2; // 将位置信息设置为 NUMBER 的位置
+    }
     |FLOAT {
       $$ = new Value((float)$1);
       @$ = @1;
+    }
+    | '-' FLOAT {
+      $$ = new Value(-(float)$2);
+      @$ = @2;
     }
     |SSS {
       char *tmp = common::substr($1,1,strlen($1)-2);
@@ -519,6 +527,7 @@ expression:
       $$ = $2;
       $$->set_name(token_name(sql_string, &@$));
     }
+    // 失去右节点
     | '-' expression %prec UMINUS {
       $$ = create_arithmetic_expression(ArithmeticExpr::Type::NEGATIVE, $2, nullptr, sql_string, &@$);
     }
@@ -579,6 +588,10 @@ where:
     }
     | WHERE condition_list {
       $$ = $2;  
+      // debug here
+      // for (auto &condition : *$2) {
+      //   printf("DEBUG: condition: %s -- comp_op %d -- %s\n", condition.left_expr->name(), (int)condition.comp_op, condition.right_expr->name());
+      // }
     }
     ;
 condition_list:

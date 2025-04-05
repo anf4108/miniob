@@ -53,6 +53,19 @@ enum CompOp
   NO_OP
 };
 
+inline const char *comp_op_to_string(CompOp op)
+{
+  switch (op) {
+    case EQUAL_TO: return "=";
+    case LESS_EQUAL: return "<=";
+    case NOT_EQUAL: return "<>";
+    case LESS_THAN: return "<";
+    case GREAT_EQUAL: return ">=";
+    case GREAT_THAN: return ">";
+    default: return "";
+  }
+}  // namespace common
+
 /**
  * @brief 描述连接运算符
  * @ingroup SQLParser
