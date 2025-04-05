@@ -1,9 +1,9 @@
-
 %{
-
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <vector>
+#include <memory>
 
 #include "common/log/log.h"
 #include "common/lang/string.h"
@@ -14,53 +14,50 @@
 
 using namespace std;
 
-string token_name(const char *sql_string, YYLTYPE *llocp)
-{
-  return string(sql_string + llocp->first_column, llocp->last_column - llocp->first_column + 1);
+string token_name(const char *sql_string, YYLTYPE *llocp) {
+    return string(sql_string + llocp->first_column, llocp->last_column - llocp->first_column + 1);
 }
 
-int yyerror(YYLTYPE *llocp, const char *sql_string, ParsedSqlResult *sql_result, yyscan_t scanner, const char *msg)
-{
-  unique_ptr<ParsedSqlNode> error_sql_node = make_unique<ParsedSqlNode>(SCF_ERROR);
-  error_sql_node->error.error_msg = msg;
-  error_sql_node->error.line = llocp->first_line;
-  error_sql_node->error.column = llocp->first_column;
-  sql_result->add_sql_node(std::move(error_sql_node));
-  return 0;
-}
+int yyerror(YYLTYPE *llocp, const char *sql_string, ParsedSqlResult *sql_result, yyscan_t scanner, ParseContext *context, const char *msg);
 
 ArithmeticExpr *create_arithmetic_expression(ArithmeticExpr::Type type,
-                                             Expression *left,
-                                             Expression *right,
-                                             const char *sql_string,
-                                             YYLTYPE *llocp)
-{
-  ArithmeticExpr *expr = new ArithmeticExpr(type, left, right);
-  expr->set_name(token_name(sql_string, llocp));
-  return expr;
+                                            Expression *left,
+                                            Expression *right,
+                                            const char *sql_string,
+                                            YYLTYPE *llocp,
+                                            ParseContext *context) {
+    ArithmeticExpr *expr = new ArithmeticExpr(type, left, right);
+    // when facing problems, I will add more code here. 
+    // 或许可以考虑unique_ptr包装所有的函数?
+    context->add_object(expr);
+    expr->set_name(token_name(sql_string, llocp));
+    return expr;
 }
 
 UnboundAggregateExpr *create_aggregate_expression(const char *aggregate_name,
-                                           Expression *child,
-                                           const char *sql_string,
-                                           YYLTYPE *llocp)
-{
-  UnboundAggregateExpr *expr = new UnboundAggregateExpr(aggregate_name, child);
-  expr->set_name(token_name(sql_string, llocp));
-  return expr;
+                                                 Expression *child,
+                                                 const char *sql_string,
+                                                 YYLTYPE *llocp,
+                                                 ParseContext *context) {
+    UnboundAggregateExpr *expr = new UnboundAggregateExpr(aggregate_name, child);
+    context->add_object(expr);
+    expr->set_name(token_name(sql_string, llocp));
+    return expr;
 }
-
 %}
 
 %define api.pure full
 %define parse.error verbose
-/** 启用位置标识 **/
 %locations
 %lex-param { yyscan_t scanner }
-/** 这些定义了在yyparse函数中的参数 **/
 %parse-param { const char * sql_string }
 %parse-param { ParsedSqlResult * sql_result }
 %parse-param { void * scanner }
+%parse-param { ParseContext * context }
+
+%code requires {
+    struct ParseContext;
+}
 
 //标识tokens
 %token  SEMICOLON
@@ -93,6 +90,8 @@ UnboundAggregateExpr *create_aggregate_expression(const char *aggregate_name,
         HELP
         EXIT
         DOT //QUOTE
+        NOT
+        NULL_T
         INTO
         VALUES
         FROM
@@ -131,6 +130,7 @@ UnboundAggregateExpr *create_aggregate_expression(const char *aggregate_name,
   char *                                     cstring;
   int                                        number;
   float                                      floats;
+  bool                                       boolean;
 }
 
 %token <number> NUMBER
@@ -181,6 +181,7 @@ UnboundAggregateExpr *create_aggregate_expression(const char *aggregate_name,
 %type <sql_node>            command_wrapper
 // commands should be a list but I use a single command instead
 %type <sql_node>            commands
+%type <boolean>            null_option
 
 %left '+' '-'
 %left '*' '/'
@@ -191,6 +192,7 @@ commands: command_wrapper opt_semicolon  //commands or sqls. parser starts here.
   {
     unique_ptr<ParsedSqlNode> sql_node = unique_ptr<ParsedSqlNode>($1);
     sql_result->add_sql_node(std::move(sql_node));
+     context->remove_all_objects();
   }
   ;
 
@@ -221,53 +223,63 @@ exit_stmt:
     EXIT {
       (void)yynerrs;  // 这么写为了消除yynerrs未使用的告警。如果你有更好的方法欢迎提PR
       $$ = new ParsedSqlNode(SCF_EXIT);
+      context->add_object($$);
     };
 
 help_stmt:
     HELP {
       $$ = new ParsedSqlNode(SCF_HELP);
+      context->add_object($$);
     };
 
 sync_stmt:
     SYNC {
       $$ = new ParsedSqlNode(SCF_SYNC);
+      context->add_object($$);
     }
     ;
 
 begin_stmt:
     TRX_BEGIN  {
       $$ = new ParsedSqlNode(SCF_BEGIN);
+      context->add_object($$);
     }
     ;
 
 commit_stmt:
     TRX_COMMIT {
       $$ = new ParsedSqlNode(SCF_COMMIT);
+      context->add_object($$);
     }
     ;
 
 rollback_stmt:
     TRX_ROLLBACK  {
       $$ = new ParsedSqlNode(SCF_ROLLBACK);
+      context->add_object($$);
     }
     ;
 
 drop_table_stmt:    /*drop table 语句的语法解析树*/
     DROP TABLE ID {
       $$ = new ParsedSqlNode(SCF_DROP_TABLE);
+      context->add_object($$);
       $$->drop_table.relation_name = $3;
     };
 
 show_tables_stmt:
     SHOW TABLES {
       $$ = new ParsedSqlNode(SCF_SHOW_TABLES);
+      context->add_object($$);
     }
     ;
 
 desc_table_stmt:
     DESC ID  {
       $$ = new ParsedSqlNode(SCF_DESC_TABLE);
+      context->add_object($$);
       $$->desc_table.relation_name = $2;
+
     }
     ;
 
@@ -275,6 +287,7 @@ create_index_stmt:    /*create index 语句的语法解析树*/
     CREATE INDEX ID ON ID LBRACE ID RBRACE
     {
       $$ = new ParsedSqlNode(SCF_CREATE_INDEX);
+      context->add_object($$);
       CreateIndexSqlNode &create_index = $$->create_index;
       create_index.index_name = $3;
       create_index.relation_name = $5;
@@ -286,6 +299,7 @@ drop_index_stmt:      /*drop index 语句的语法解析树*/
     DROP INDEX ID ON ID
     {
       $$ = new ParsedSqlNode(SCF_DROP_INDEX);
+      context->add_object($$);
       $$->drop_index.index_name = $3;
       $$->drop_index.relation_name = $5;
     }
@@ -295,6 +309,7 @@ create_table_stmt:    /*create table 语句的语法解析树*/
     {
       // $$ 表示返回值
       $$ = new ParsedSqlNode(SCF_CREATE_TABLE);
+      context->add_object($$);
       CreateTableSqlNode &create_table = $$->create_table;
       create_table.relation_name = $3;
       // 传递的是指针, 不进行拷贝:
@@ -330,29 +345,51 @@ attr_def_list:
         $$ = $3;
       } else {
         $$ = new vector<AttrInfoSqlNode>;
+        context->add_object($$);
       }
       $$->emplace_back(*$2);
+      context->remove_object($2);
       delete $2;
     }
     ;
     
 attr_def:
     // number 表示长度
-    ID type LBRACE number RBRACE 
+    ID type LBRACE number RBRACE null_option
     {
       $$ = new AttrInfoSqlNode;
+      context->add_object($$);
       $$->type = (AttrType)$2;
-      $$->name = $1;
+      $$->name = $1; // std::string 复制 $1(为char*) 的内容
       $$->length = $4;
+      $$->nullable = $6;
+      // Is this necessary? 何时free
+      free($1);
     }
-    | ID type
+    | ID type null_option
     {
       $$ = new AttrInfoSqlNode;
+      context->add_object($$);
       $$->type = (AttrType)$2;
       $$->name = $1;
       $$->length = 4;
+      $$->nullable = $3;
     }
     ;
+
+null_option:
+    /* empty */
+    {
+      $$ = true;
+    }
+    | NULL_T {
+      $$ = true;
+    }
+    | NOT NULL_T {
+      $$ = false;
+    }
+    ;
+
 number:
     NUMBER {$$ = $1;}
     ;
@@ -367,6 +404,7 @@ insert_stmt:        /*insert   语句的语法解析树*/
     INSERT INTO ID VALUES LBRACE value value_list RBRACE 
     {
       $$ = new ParsedSqlNode(SCF_INSERT);
+      context->add_object($$);
       $$->insertion.relation_name = $3;
       if ($7 != nullptr) {
         $$->insertion.values.swap(*$7);
@@ -388,31 +426,38 @@ value_list:
         $$ = $3;
       } else {
         $$ = new vector<Value>;
+        context->add_object($$);
       }
       $$->emplace_back(*$2);
+      context->remove_object($2);
       delete $2;
     }
     ;
 value:
     NUMBER {
       $$ = new Value((int)$1);
+      context->add_object($$);
       @$ = @1;
     }
     | '-' NUMBER {
       $$ = new Value(-(int)$2);
+      context->add_object($$);
       @$ = @2; // 将位置信息设置为 NUMBER 的位置
     }
     |FLOAT {
       $$ = new Value((float)$1);
+      context->add_object($$);
       @$ = @1;
     }
     | '-' FLOAT {
       $$ = new Value(-(float)$2);
+      context->add_object($$);
       @$ = @2;
     }
     |SSS {
       char *tmp = common::substr($1,1,strlen($1)-2);
       $$ = new Value(tmp);
+      context->add_object($$);
       free(tmp);
     }
     | DATE {
@@ -420,6 +465,7 @@ value:
       char *tmp = common::substr($1,1,strlen($1)-2);
       bool is_date = true;
       $$ = new Value(tmp, is_date);
+      context->add_object($$);
       free(tmp);
     }
     ;
@@ -438,6 +484,7 @@ delete_stmt:    /*  delete 语句的语法解析树*/
     DELETE FROM ID where 
     {
       $$ = new ParsedSqlNode(SCF_DELETE);
+      context->add_object($$);
       $$->deletion.relation_name = $3;
       if ($4 != nullptr) {
         $$->deletion.conditions.swap(*$4);
@@ -449,6 +496,7 @@ update_stmt:      /*  update 语句的语法解析树*/
     UPDATE ID SET ID EQ value where 
     {
       $$ = new ParsedSqlNode(SCF_UPDATE);
+      context->add_object($$);
       $$->update.relation_name = $2;
       $$->update.attribute_name = $4;
       $$->update.value = *$6;
@@ -461,7 +509,9 @@ update_stmt:      /*  update 语句的语法解析树*/
 select_stmt:        /*  select 语句的语法解析树*/
     SELECT expression_list FROM rel_list where group_by
     {
+      LOG_DEBUG("DEBUG: select_stmt");
       $$ = new ParsedSqlNode(SCF_SELECT);
+      context->add_object($$);
       if ($2 != nullptr) {
         $$->selection.expressions.swap(*$2);
         delete $2;
@@ -489,6 +539,7 @@ calc_stmt:
     CALC expression_list
     {
       $$ = new ParsedSqlNode(SCF_CALC);
+      context->add_object($$);
       $$->calc.expressions.swap(*$2);
       delete $2;
     }
@@ -498,7 +549,9 @@ expression_list:
     expression
     {
       $$ = new vector<unique_ptr<Expression>>;
+      context->add_object($$);
       $$->emplace_back($1);
+      context->remove_object($1);
     }
     | expression COMMA expression_list
     {
@@ -506,22 +559,24 @@ expression_list:
         $$ = $3;
       } else {
         $$ = new vector<unique_ptr<Expression>>;
+        context->add_object($$);
       }
       $$->emplace($$->begin(), $1);
+      context->remove_object($1);
     }
     ;
 expression:
     expression '+' expression {
-      $$ = create_arithmetic_expression(ArithmeticExpr::Type::ADD, $1, $3, sql_string, &@$);
+      $$ = create_arithmetic_expression(ArithmeticExpr::Type::ADD, $1, $3, sql_string, &@$, context);
     }
     | expression '-' expression {
-      $$ = create_arithmetic_expression(ArithmeticExpr::Type::SUB, $1, $3, sql_string, &@$);
+      $$ = create_arithmetic_expression(ArithmeticExpr::Type::SUB, $1, $3, sql_string, &@$, context);
     }
     | expression '*' expression {
-      $$ = create_arithmetic_expression(ArithmeticExpr::Type::MUL, $1, $3, sql_string, &@$);
+      $$ = create_arithmetic_expression(ArithmeticExpr::Type::MUL, $1, $3, sql_string, &@$, context);
     }
     | expression '/' expression {
-      $$ = create_arithmetic_expression(ArithmeticExpr::Type::DIV, $1, $3, sql_string, &@$);
+      $$ = create_arithmetic_expression(ArithmeticExpr::Type::DIV, $1, $3, sql_string, &@$, context);
     }
     | LBRACE expression RBRACE {
       $$ = $2;
@@ -529,21 +584,24 @@ expression:
     }
     // 失去右节点
     | '-' expression %prec UMINUS {
-      $$ = create_arithmetic_expression(ArithmeticExpr::Type::NEGATIVE, $2, nullptr, sql_string, &@$);
+      $$ = create_arithmetic_expression(ArithmeticExpr::Type::NEGATIVE, $2, nullptr, sql_string, &@$, context);
     }
     | value {
-      $$ = new ValueExpr(*$1);
+      $$ = new ValueExpr(*$1);  // 拷贝构造
+      context->add_object($$);
       $$->set_name(token_name(sql_string, &@$));
       delete $1;
     }
     | rel_attr {
       RelAttrSqlNode *node = $1;
       $$ = new UnboundFieldExpr(node->relation_name, node->attribute_name);
+      context->add_object($$);
       $$->set_name(token_name(sql_string, &@$));
       delete $1;
     }
     | '*' {
       $$ = new StarExpr();
+      context->add_object($$);
     }
     // your code here
     ;
@@ -551,10 +609,12 @@ expression:
 rel_attr:
     ID {
       $$ = new RelAttrSqlNode;
+      context->add_object($$);
       $$->attribute_name = $1;
     }
     | ID DOT ID {
       $$ = new RelAttrSqlNode;
+      context->add_object($$);
       $$->relation_name  = $1;
       $$->attribute_name = $3;
     }
@@ -568,6 +628,7 @@ relation:
 rel_list:
     relation {
       $$ = new vector<string>();
+      context->add_object($$);
       $$->push_back($1);
     }
     | relation COMMA rel_list {
@@ -575,6 +636,7 @@ rel_list:
         $$ = $3;
       } else {
         $$ = new vector<string>;
+        context->add_object($$);
       }
 
       $$->insert($$->begin(), $1);
@@ -601,14 +663,21 @@ condition_list:
     }
     | condition {
       $$ = new vector<ConditionSqlNode>;
+      context->add_object($$);
       $1->conjunction_type = ConjunctionType::NO_CONJUNCTION;
       $$->emplace_back(std::move(*$1));
+      context->remove_object($1);
       delete $1;
     }
     | condition AND condition_list {
       $$ = $3;
+      if ($$ == nullptr) {
+        $$ = new vector<ConditionSqlNode>;
+        context->add_object($$);
+      }
       $1->conjunction_type = ConjunctionType::CONJ_AND;
       $$->emplace_back(std::move(*$1));
+      context->remove_object($1);
       delete $1;
     }
     ;
@@ -616,6 +685,7 @@ condition:
     expression comp_op expression
     {
       $$ = new ConditionSqlNode;
+      context->add_object($$);
       $$->comp_op = $2;
       $$->left_expr = unique_ptr<Expression>($1);
       $$->right_expr = unique_ptr<Expression>($3);  
@@ -642,8 +712,8 @@ load_data_stmt:
     LOAD DATA INFILE SSS INTO TABLE ID 
     {
       char *tmp_file_name = common::substr($4, 1, strlen($4) - 2);
-      
       $$ = new ParsedSqlNode(SCF_LOAD_DATA);
+      context->add_object($$);
       $$->load_data.relation_name = $7;
       $$->load_data.file_name = tmp_file_name;
       free(tmp_file_name);
@@ -654,6 +724,7 @@ explain_stmt:
     EXPLAIN command_wrapper
     {
       $$ = new ParsedSqlNode(SCF_EXPLAIN);
+      context->add_object($$);
       $$->explain.sql_node = unique_ptr<ParsedSqlNode>($2);
     }
     ;
@@ -662,8 +733,10 @@ set_variable_stmt:
     SET ID EQ value
     {
       $$ = new ParsedSqlNode(SCF_SET_VARIABLE);
+      context->add_object($$);
       $$->set_variable.name  = $2;
       $$->set_variable.value = *$4;
+      context->remove_object($4);
       delete $4;
     }
     ;
@@ -672,21 +745,35 @@ opt_semicolon: /*empty*/
     | SEMICOLON
     ;
 %%
-//_____________________________________________________________________
+
 extern void scan_string(const char *str, yyscan_t scanner);
 
+int yyerror(YYLTYPE *llocp, const char *sql_string, ParsedSqlResult *sql_result, 
+           yyscan_t scanner, ParseContext *context, const char *msg) {
+    unique_ptr<ParsedSqlNode> error_sql_node = make_unique<ParsedSqlNode>(SCF_ERROR);
+    error_sql_node->error.error_msg = msg;
+    error_sql_node->error.line = llocp->first_line;
+    error_sql_node->error.column = llocp->first_column;
+    sql_result->add_sql_node(std::move(error_sql_node));
+
+    context->clear();
+    return 0;
+}
+
 int sql_parse(const char *s, ParsedSqlResult *sql_result) {
-  yyscan_t scanner;
-  std::vector<char *> allocated_strings;
-  yylex_init_extra(static_cast<void*>(&allocated_strings),&scanner);
-  scan_string(s, scanner);
-  int result = yyparse(s, sql_result, scanner);
+    yyscan_t scanner;
+    std::vector<char *> allocated_strings;
+    ParseContext context;
 
-  for (char *ptr : allocated_strings) {
-    free(ptr);
-  }
-  allocated_strings.clear();
+    yylex_init_extra(static_cast<void*>(&allocated_strings), &scanner);
+    scan_string(s, scanner);
+    int result = yyparse(s, sql_result, scanner, &context);
 
-  yylex_destroy(scanner);
-  return result;
+    for (char *ptr : allocated_strings) {
+        free(ptr);
+    }
+    allocated_strings.clear();
+
+    yylex_destroy(scanner);
+    return result;
 }

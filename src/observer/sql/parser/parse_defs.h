@@ -17,10 +17,11 @@ See the Mulan PSL v2 for more details. */
 #include "common/lang/string.h"
 #include "common/lang/vector.h"
 #include "common/lang/memory.h"
+#include "common/lang/algorithm.h"
 #include "common/value.h"
 
 class Expression;
-
+// class Value;
 /**
  * @defgroup SQLParser SQL Parser
  */
@@ -158,13 +159,14 @@ struct UpdateSqlNode
 /**
  * @brief 描述一个属性
  * @ingroup SQLParser
- * @details 属性，或者说字段(column, field)
+ * @details 属性，或者说字段(column, field) 加入NULLABLE描述
  */
 struct AttrInfoSqlNode
 {
-  AttrType type;    ///< Type of attribute
-  string   name;    ///< Attribute name
-  size_t   length;  ///< Length of attribute
+  AttrType type;      ///< Type of attribute
+  string   name;      ///< Attribute name
+  size_t   length;    ///< Length of attribute
+  bool     nullable;  ///< 是否允许NULL值
 };
 
 /**
@@ -339,4 +341,49 @@ public:
 
 private:
   vector<unique_ptr<ParsedSqlNode>> sql_nodes_;  ///< 这里记录SQL命令。虽然看起来支持多个，但是当前仅处理一个
+};
+
+struct Deleter
+{
+  virtual ~Deleter()                 = default;
+  virtual void operator()(void *ptr) = 0;
+};
+
+template <typename T>
+struct TypedDeleter : Deleter
+{
+  void operator()(void *ptr) override { delete static_cast<T *>(ptr); }
+};
+/**
+ * @brief 解析上下文
+ * @details 解析上下文用于保存解析过程中分配的对象，避免内存泄漏
+ * 自定义实现了一个Deleter类，用于删除不同类型的对象
+ */
+struct ParseContext
+{
+  std::vector<std::pair<void *, std::unique_ptr<Deleter>>> allocated_objects;
+
+  template <typename T>
+  void add_object(T *obj)
+  {
+    allocated_objects.emplace_back(obj, std::make_unique<TypedDeleter<T>>());
+  }
+
+  template <typename T>
+  void remove_object(T *obj)
+  {
+    auto it = std::remove_if(
+        allocated_objects.begin(), allocated_objects.end(), [obj](const auto &pair) { return pair.first == obj; });
+    allocated_objects.erase(it, allocated_objects.end());
+  }
+
+  void remove_all_objects() { allocated_objects.clear(); }
+
+  void clear()
+  {
+    for (auto &[ptr, deleter] : allocated_objects) {
+      (*deleter)(ptr);
+    }
+    allocated_objects.clear();
+  }
 };
