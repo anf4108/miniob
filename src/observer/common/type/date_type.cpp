@@ -1,11 +1,14 @@
-#include "date_type.h"
+#include "common/type/date_type.h"
 #include "common/value.h"
 #include "common/lang/comparator.h"
+#include "common/log/log.h"
 #include "common/lang/sstream.h"
 #include <iomanip>
 
 int DateType::compare(const Value &left, const Value &right) const
 {
+  ASSERT(left.attr_type() == AttrType::DATES && right.attr_type() == AttrType::DATES, "invalid type");
+  LOG_DEBUG("left=%d, right=%d", left.value_.int_value_, right.value_.int_value_);
   return common::compare_int((void *)&left.value_.int_value_, (void *)&right.value_.int_value_);
 }
 

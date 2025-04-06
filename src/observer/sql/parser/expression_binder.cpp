@@ -148,13 +148,17 @@ RC ExpressionBinder::bind_unbound_field_expression(
       LOG_INFO("cannot determine table for field: %s", field_name);
       return RC::SCHEMA_TABLE_NOT_EXIST;
     }
-
-    table = context_.query_tables()[0];
+    table_name = nullptr;
+    table      = context_.query_tables()[0];
   } else {
     table = context_.find_table(table_name);
     if (nullptr == table) {
       LOG_INFO("no such table in from list: %s", table_name);
       return RC::SCHEMA_TABLE_NOT_EXIST;
+    }
+    if (context_.query_tables().size() == 1) {
+      // 如果只有一个表，表名被省略
+      table_name = nullptr;
     }
   }
 
@@ -168,7 +172,7 @@ RC ExpressionBinder::bind_unbound_field_expression(
     }
 
     Field      field(table, field_meta);
-    FieldExpr *field_expr = new FieldExpr(field);
+    FieldExpr *field_expr = new FieldExpr(field, table_name);
     field_expr->set_name(field_name);
     bound_expressions.emplace_back(field_expr);
   }
@@ -186,6 +190,10 @@ RC ExpressionBinder::bind_field_expression(
 RC ExpressionBinder::bind_value_expression(
     unique_ptr<Expression> &value_expr, vector<unique_ptr<Expression>> &bound_expressions)
 {
+  if (value_expr->value_type() == AttrType::UNDEFINED) {
+    return RC::INVALID_ARGUMENT;
+  }
+  // what is going up here???????
   bound_expressions.emplace_back(std::move(value_expr));
   return RC::SUCCESS;
 }
@@ -235,6 +243,7 @@ RC ExpressionBinder::bind_comparison_expression(
   unique_ptr<Expression>        &left_expr  = comparison_expr->left();
   unique_ptr<Expression>        &right_expr = comparison_expr->right();
 
+  // LOG_DEBUG("start to bind comparison expression: %s", expr->name());
   RC rc = bind_expression(left_expr, child_bound_expressions);
   if (rc != RC::SUCCESS) {
     return rc;
@@ -249,6 +258,8 @@ RC ExpressionBinder::bind_comparison_expression(
   if (left.get() != left_expr.get()) {
     left_expr.reset(left.release());
   }
+
+  // LOG_DEBUG("having bound left comparison expression: %s", left_expr->name());
 
   child_bound_expressions.clear();
   rc = bind_expression(right_expr, child_bound_expressions);
@@ -309,6 +320,7 @@ RC ExpressionBinder::bind_conjunction_expression(
 RC ExpressionBinder::bind_arithmetic_expression(
     unique_ptr<Expression> &expr, vector<unique_ptr<Expression>> &bound_expressions)
 {
+  // 此处需要处理一元运算符，即负号
   if (nullptr == expr) {
     return RC::SUCCESS;
   }
@@ -335,6 +347,13 @@ RC ExpressionBinder::bind_arithmetic_expression(
   }
 
   child_bound_expressions.clear();
+
+  if (ArithmeticExpr::Type::NEGATIVE == arithmetic_expr->arithmetic_type()) {
+    // 一元运算符
+    bound_expressions.emplace_back(std::move(expr));
+    return RC::SUCCESS;
+  }
+
   rc = bind_expression(right_expr, child_bound_expressions);
   if (OB_FAIL(rc)) {
     return rc;
@@ -384,7 +403,7 @@ RC check_aggregate_expression(AggregateExpr &expression)
   }
 
   // 子表达式中不能再包含聚合表达式
-  function<RC(unique_ptr<Expression>&)> check_aggregate_expr = [&](unique_ptr<Expression> &expr) -> RC {
+  function<RC(unique_ptr<Expression> &)> check_aggregate_expr = [&](unique_ptr<Expression> &expr) -> RC {
     RC rc = RC::SUCCESS;
     if (expr->type() == ExprType::AGGREGATION) {
       LOG_WARN("aggregate expression cannot be nested");
@@ -406,10 +425,10 @@ RC ExpressionBinder::bind_aggregate_expression(
     return RC::SUCCESS;
   }
 
-  auto unbound_aggregate_expr = static_cast<UnboundAggregateExpr *>(expr.get());
-  const char *aggregate_name = unbound_aggregate_expr->aggregate_name();
+  auto                unbound_aggregate_expr = static_cast<UnboundAggregateExpr *>(expr.get());
+  const char         *aggregate_name         = unbound_aggregate_expr->aggregate_name();
   AggregateExpr::Type aggregate_type;
-  RC rc = AggregateExpr::type_from_string(aggregate_name, aggregate_type);
+  RC                  rc = AggregateExpr::type_from_string(aggregate_name, aggregate_type);
   if (OB_FAIL(rc)) {
     LOG_WARN("invalid aggregate name: %s", aggregate_name);
     return rc;

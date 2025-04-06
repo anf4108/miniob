@@ -47,6 +47,8 @@ RC FloatType::divide(const Value &left, const Value &right, Value &result) const
     // NOTE:
     // 设置为浮点数最大值是不正确的。通常的做法是设置为NULL，但是当前的miniob没有NULL概念，所以这里设置为浮点数最大值。
     result.set_float(numeric_limits<float>::max());
+    // 现在设置为null
+    result.set_type(AttrType::NULLS);
   } else {
     result.set_float(left.get_float() / right.get_float());
   }
@@ -61,7 +63,7 @@ RC FloatType::negative(const Value &val, Value &result) const
 
 RC FloatType::set_value_from_str(Value &val, const string &data) const
 {
-  RC                rc = RC::SUCCESS;
+  RC           rc = RC::SUCCESS;
   stringstream deserialize_stream;
   deserialize_stream.clear();
   deserialize_stream.str(data);

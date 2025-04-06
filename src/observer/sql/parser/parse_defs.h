@@ -17,10 +17,11 @@ See the Mulan PSL v2 for more details. */
 #include "common/lang/string.h"
 #include "common/lang/vector.h"
 #include "common/lang/memory.h"
+#include "common/lang/algorithm.h"
 #include "common/value.h"
 
 class Expression;
-
+// class Value;
 /**
  * @defgroup SQLParser SQL Parser
  */
@@ -53,25 +54,45 @@ enum CompOp
   NO_OP
 };
 
+inline const char *comp_op_to_string(CompOp op)
+{
+  switch (op) {
+    case EQUAL_TO: return "=";
+    case LESS_EQUAL: return "<=";
+    case NOT_EQUAL: return "<>";
+    case LESS_THAN: return "<";
+    case GREAT_EQUAL: return ">=";
+    case GREAT_THAN: return ">";
+    default: return "";
+  }
+}  // namespace common
+
+/**
+ * @brief 描述连接运算符
+ * @ingroup SQLParser
+ * @details 连接运算符就是AND、OR、NOT等 部分运算符暂时不需要实现
+ */
+enum ConjunctionType
+{
+  CONJ_AND,
+  CONJ_OR,
+  CONJ_NOT,
+  NO_CONJUNCTION
+};
+
 /**
  * @brief 表示一个条件比较
  * @ingroup SQLParser
  * @details 条件比较就是SQL查询中的 where a>b 这种。
- * 一个条件比较是有两部分组成的，称为左边和右边。
- * 左边和右边理论上都可以是任意的数据，比如是字段（属性，列），也可以是数值常量。
- * 这个结构中记录的仅仅支持字段和值。
+ * 选择直接用expression进行抽象，
+ * 直接用一个ComparisonExpr表示
  */
 struct ConditionSqlNode
 {
-  int left_is_attr;              ///< TRUE if left-hand side is an attribute
-                                 ///< 1时，操作符左边是属性名，0时，是属性值
-  Value          left_value;     ///< left-hand side value if left_is_attr = FALSE
-  RelAttrSqlNode left_attr;      ///< left-hand side attribute
-  CompOp         comp;           ///< comparison operator
-  int            right_is_attr;  ///< TRUE if right-hand side is an attribute
-                                 ///< 1时，操作符右边是属性名，0时，是属性值
-  RelAttrSqlNode right_attr;     ///< right-hand side attribute if right_is_attr = TRUE 右边的属性
-  Value          right_value;    ///< right-hand side value if right_is_attr = FALSE
+  unique_ptr<Expression> left_expr;                          ///< 左边的表达式
+  unique_ptr<Expression> right_expr;                         ///< 右边的表达式
+  CompOp                 comp_op;                            ///< comparison operator
+  char                   conjunction_type = NO_CONJUNCTION;  ///< conjunction type
 };
 
 /**
@@ -89,7 +110,7 @@ struct SelectSqlNode
 {
   vector<unique_ptr<Expression>> expressions;  ///< 查询的表达式
   vector<string>                 relations;    ///< 查询的表
-  vector<ConditionSqlNode>       conditions;   ///< 查询条件，使用AND串联起来多个条件
+  vector<ConditionSqlNode>       conditions;   ///< 查询条件，使用AND、OR等conjunction串联起来多个条件
   vector<unique_ptr<Expression>> group_by;     ///< group by clause
 };
 
@@ -106,6 +127,7 @@ struct CalcSqlNode
  * @brief 描述一个insert语句
  * @ingroup SQLParser
  * @details 于Selects类似，也做了很多简化
+ * 默认只能插入Values，不能插入表达式
  */
 struct InsertSqlNode
 {
@@ -138,13 +160,14 @@ struct UpdateSqlNode
 /**
  * @brief 描述一个属性
  * @ingroup SQLParser
- * @details 属性，或者说字段(column, field)
+ * @details 属性，或者说字段(column, field) 加入NULLABLE描述
  */
 struct AttrInfoSqlNode
 {
-  AttrType type;    ///< Type of attribute
-  string   name;    ///< Attribute name
-  size_t   length;  ///< Length of attribute
+  AttrType type;      ///< Type of attribute
+  string   name;      ///< Attribute name
+  size_t   length;    ///< Length of attribute
+  bool     nullable;  ///< 是否允许NULL值
 };
 
 /**
@@ -319,4 +342,49 @@ public:
 
 private:
   vector<unique_ptr<ParsedSqlNode>> sql_nodes_;  ///< 这里记录SQL命令。虽然看起来支持多个，但是当前仅处理一个
+};
+
+struct Deleter
+{
+  virtual ~Deleter()                 = default;
+  virtual void operator()(void *ptr) = 0;
+};
+
+template <typename T>
+struct TypedDeleter : Deleter
+{
+  void operator()(void *ptr) override { delete static_cast<T *>(ptr); }
+};
+/**
+ * @brief 解析上下文
+ * @details 解析上下文用于保存解析过程中分配的对象，避免内存泄漏
+ * 自定义实现了一个Deleter类，用于删除不同类型的对象
+ */
+struct ParseContext
+{
+  std::vector<std::pair<void *, std::unique_ptr<Deleter>>> allocated_objects;
+
+  template <typename T>
+  void add_object(T *obj)
+  {
+    allocated_objects.emplace_back(obj, std::make_unique<TypedDeleter<T>>());
+  }
+
+  template <typename T>
+  void remove_object(T *obj)
+  {
+    auto it = std::remove_if(
+        allocated_objects.begin(), allocated_objects.end(), [obj](const auto &pair) { return pair.first == obj; });
+    allocated_objects.erase(it, allocated_objects.end());
+  }
+
+  void remove_all_objects() { allocated_objects.clear(); }
+
+  void clear()
+  {
+    for (auto &[ptr, deleter] : allocated_objects) {
+      (*deleter)(ptr);
+    }
+    allocated_objects.clear();
+  }
 };

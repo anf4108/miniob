@@ -17,6 +17,7 @@ See the Mulan PSL v2 for more details. */
 #include "common/value.h"
 #include "storage/record/record_manager.h"
 #include "storage/table/table.h"
+#include "sql/expr/expression.h"
 #include <math.h>
 #include <stddef.h>
 
@@ -64,43 +65,50 @@ RC DefaultConditionFilter::init(Table &table, const ConditionSqlNode &condition)
   AttrType type_left  = AttrType::UNDEFINED;
   AttrType type_right = AttrType::UNDEFINED;
 
-  if (1 == condition.left_is_attr) {
+  // 这里的条件是一个表达式，可能是一个字段，也可能是一个值
+
+  Expression *left_expr  = condition.left_expr.get();
+  auto        right_expr = condition.right_expr.get();
+  if (left_expr->type() == ExprType::VALUE) {
+    left.is_attr     = false;
+    left.value       = static_cast<ValueExpr *>(left_expr)->get_value();
+    type_left        = left.value.attr_type();
+    left.attr_length = 0;
+    left.attr_offset = 0;
+  } else if (left_expr->type() == ExprType::FIELD) {
     left.is_attr                = true;
-    const FieldMeta *field_left = table_meta.field(condition.left_attr.attribute_name.c_str());
+    const FieldMeta *field_left = table_meta.field(static_cast<FieldExpr *>(left_expr)->field_name());
     if (nullptr == field_left) {
-      LOG_WARN("No such field in condition. %s.%s", table.name(), condition.left_attr.attribute_name.c_str());
+      LOG_WARN("No such field in condition. %s.%s", table.name(), static_cast<FieldExpr *>(left_expr)->field_name());
       return RC::SCHEMA_FIELD_MISSING;
     }
     left.attr_length = field_left->len();
     left.attr_offset = field_left->offset();
-
-    type_left = field_left->type();
+    type_left        = field_left->type();
   } else {
-    left.is_attr = false;
-    left.value   = condition.left_value;  // 校验type 或者转换类型
-    type_left    = condition.left_value.attr_type();
-
-    left.attr_length = 0;
-    left.attr_offset = 0;
+    LOG_ERROR("Invalid condition with unsupported expression type: %d", left_expr->type());
+    return RC::INVALID_ARGUMENT;
   }
 
-  if (1 == condition.right_is_attr) {
+  if (right_expr->type() == ExprType::VALUE) {
+    right.is_attr     = false;
+    right.value       = static_cast<ValueExpr *>(right_expr)->get_value();
+    type_right        = right.value.attr_type();
+    right.attr_length = 0;
+    right.attr_offset = 0;
+  } else if (right_expr->type() == ExprType::FIELD) {
     right.is_attr                = true;
-    const FieldMeta *field_right = table_meta.field(condition.right_attr.attribute_name.c_str());
+    const FieldMeta *field_right = table_meta.field(static_cast<FieldExpr *>(right_expr)->field_name());
     if (nullptr == field_right) {
-      LOG_WARN("No such field in condition. %s.%s", table.name(), condition.right_attr.attribute_name.c_str());
+      LOG_WARN("No such field in condition. %s.%s", table.name(), static_cast<FieldExpr *>(right_expr)->field_name());
       return RC::SCHEMA_FIELD_MISSING;
     }
     right.attr_length = field_right->len();
     right.attr_offset = field_right->offset();
     type_right        = field_right->type();
   } else {
-    right.is_attr = false;
-    right.value   = condition.right_value;
-    type_right    = condition.right_value.attr_type();
-
-    right.attr_length = 0;
-    right.attr_offset = 0;
+    LOG_ERROR("Invalid condition with unsupported expression type: %d", right_expr->type());
+    return RC::INVALID_ARGUMENT;
   }
 
   // 校验和转换
@@ -110,11 +118,20 @@ RC DefaultConditionFilter::init(Table &table, const ConditionSqlNode &condition)
   //  }
   // NOTE：这里没有实现不同类型的数据比较，比如整数跟浮点数之间的对比
   // 但是选手们还是要实现。这个功能在预选赛中会出现
+
+  // 已经可以通过type实现了
   if (type_left != type_right) {
-    return RC::SCHEMA_FIELD_TYPE_MISMATCH;
+    if (type_left == AttrType::FLOATS && type_right == AttrType::INTS) {
+      // do nothing
+    } else if (type_left == AttrType::INTS && type_right == AttrType::FLOATS) {
+      // do nothing
+    } else {
+      LOG_ERROR("Invalid condition with different attribute types: %d, %d", type_left, type_right);
+      return RC::SCHEMA_FIELD_TYPE_MISMATCH;
+    }
   }
 
-  return init(left, right, type_left, condition.comp);
+  return init(left, right, type_left, condition.comp_op);
 }
 
 bool DefaultConditionFilter::filter(const Record &rec) const
@@ -137,6 +154,10 @@ bool DefaultConditionFilter::filter(const Record &rec) const
   }
 
   int cmp_result = left_value.compare(right_value);
+  if (cmp_result == INT32_MAX) {
+    // 处理如果有一个值为NULL的情况
+    return false;
+  }
 
   switch (comp_op_) {
     case EQUAL_TO: return 0 == cmp_result;

@@ -61,31 +61,57 @@ public:
 
   static RC add(const Value &left, const Value &right, Value &result)
   {
+    if (left.is_null() || right.is_null()) {
+      result.set_null();
+      return RC::SUCCESS;
+    }
     return DataType::type_instance(result.attr_type())->add(left, right, result);
   }
 
   static RC subtract(const Value &left, const Value &right, Value &result)
   {
+    if (left.is_null() || right.is_null()) {
+      result.set_null();
+      return RC::SUCCESS;
+    }
     return DataType::type_instance(result.attr_type())->subtract(left, right, result);
   }
 
   static RC multiply(const Value &left, const Value &right, Value &result)
   {
+    if (left.is_null() || right.is_null()) {
+      result.set_null();
+      return RC::SUCCESS;
+    }
     return DataType::type_instance(result.attr_type())->multiply(left, right, result);
   }
 
   static RC divide(const Value &left, const Value &right, Value &result)
   {
+    if (left.is_null() || right.is_null()) {
+      result.set_null();
+      return RC::SUCCESS;
+    }
+    // 除法运算结果类型为 FLOATS
     return DataType::type_instance(result.attr_type())->divide(left, right, result);
   }
 
   static RC negative(const Value &value, Value &result)
   {
+    if (value.is_null()) {
+      result.set_null();
+      return RC::SUCCESS;
+    }
     return DataType::type_instance(result.attr_type())->negative(value, result);
   }
 
   static RC cast_to(const Value &value, AttrType to_type, Value &result)
   {
+    if (value.is_null()) {
+      // result.set_type(to_type);
+      // result.set_null();
+      return RC::SUCCESS;
+    }
     return DataType::type_instance(value.attr_type())->cast_to(value, to_type, result);
   }
 
@@ -94,6 +120,7 @@ public:
   void set_data(const char *data, int length) { this->set_data(const_cast<char *>(data), length); }
   void set_value(const Value &value);
   void set_boolean(bool val);
+  void set_null();
 
   string to_string() const;
 
@@ -114,12 +141,16 @@ public:
   string get_string() const;
   bool   get_boolean() const;
 
+  bool is_null() const { return attr_type_ == AttrType::NULLS; }
+  bool is_valid_date() const;
+
 private:
   void set_int(int val);
   void set_float(float val);
   void set_string(const char *s, int len = 0);
-  void set_date(int val);
   void set_string_from_other(const Value &other);
+  void set_date(const char *date_str);
+  void set_date(int val);
 
 private:
   AttrType attr_type_ = AttrType::UNDEFINED;
