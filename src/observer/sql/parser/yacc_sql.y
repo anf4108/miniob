@@ -364,7 +364,7 @@ attr_def:
       $$->length = $4;
       $$->nullable = $6;
       // Is this necessary? 何时free
-      free($1);
+      // free($1);
     }
     | ID type null_option
     {
