@@ -62,7 +62,6 @@ RC FilterStmt::create(Db *db, Table *default_table, std::unordered_map<std::stri
         condition_expr->set_name(string(dynamic_cast<ComparisonExpr *>(condition_expr.get())->left()->name()) + " " +
                                  comp_op_to_string(condition.comp_op) + " " +
                                  dynamic_cast<ComparisonExpr *>(condition_expr.get())->right()->name());
-
         RC rc = expression_binder.bind_expression(condition_expr, bound_conditions);
         if (rc != RC::SUCCESS) {
           delete tmp_stmt;

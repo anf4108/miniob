@@ -127,6 +127,7 @@ struct CalcSqlNode
  * @brief 描述一个insert语句
  * @ingroup SQLParser
  * @details 于Selects类似，也做了很多简化
+ * 默认只能插入Values，不能插入表达式
  */
 struct InsertSqlNode
 {

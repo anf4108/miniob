@@ -435,6 +435,7 @@ value_list:
     ;
 value:
     NUMBER {
+      LOG_DEBUG("DEBUG: reduce NUMBER");
       $$ = new Value((int)$1);
       context->add_object($$);
       @$ = @1;
@@ -467,6 +468,12 @@ value:
       $$ = new Value(tmp, is_date);
       context->add_object($$);
       free(tmp);
+    }
+    | NULL_T {
+      LOG_DEBUG("DEBUG: reduce NULL_T");
+      $$ = new Value();
+      $$->set_null();
+      context->add_object($$);
     }
     ;
 storage_format:
@@ -576,6 +583,7 @@ expression:
       $$ = create_arithmetic_expression(ArithmeticExpr::Type::MUL, $1, $3, sql_string, &@$, context);
     }
     | expression '/' expression {
+      LOG_DEBUG("DEBUG: reduce expression / expression");
       $$ = create_arithmetic_expression(ArithmeticExpr::Type::DIV, $1, $3, sql_string, &@$, context);
     }
     | LBRACE expression RBRACE {
@@ -684,6 +692,7 @@ condition_list:
 condition:
     expression comp_op expression
     {
+      LOG_DEBUG("DEBUG: reduce expression comp_op expression");
       $$ = new ConditionSqlNode;
       context->add_object($$);
       $$->comp_op = $2;

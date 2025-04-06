@@ -123,6 +123,11 @@ RC ComparisonExpr::compare_value(const Value &left, const Value &right, bool &re
   RC  rc         = RC::SUCCESS;
   int cmp_result = left.compare(right);
   result         = false;
+  if (cmp_result == INT32_MAX) {
+    // 处理如果有一个值为NULL的情况
+    result = false;
+    return rc;
+  }
   switch (comp_) {
     case EQUAL_TO: {
       result = (0 == cmp_result);
@@ -172,6 +177,7 @@ RC ComparisonExpr::try_get_value(Value &cell) const
   return RC::INVALID_ARGUMENT;
 }
 
+// 需要进行大幅修改
 RC ComparisonExpr::get_value(const Tuple &tuple, Value &value) const
 {
   Value left_value;
@@ -307,6 +313,7 @@ AttrType ArithmeticExpr::value_type() const
     return left_->value_type();
   }
 
+  // 自动会转换为浮点数
   if (left_->value_type() == AttrType::INTS && right_->value_type() == AttrType::INTS &&
       arithmetic_type_ != Type::DIV) {
     return AttrType::INTS;

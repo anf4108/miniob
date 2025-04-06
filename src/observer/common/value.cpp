@@ -131,6 +131,7 @@ void Value::set_data(char *data, int length)
       value_.int_value_ = *(int *)data;
       length_           = length;
     } break;
+    // 对于NULL值,没有实际数据
     default: {
       LOG_WARN("unknown data type: %d", attr_type_);
     } break;
@@ -189,6 +190,13 @@ void Value::set_date(int val)
   length_           = sizeof(val);
 }
 
+void Value::set_null()
+{
+  reset();
+  attr_type_ = AttrType::NULLS;
+  length_    = 4;
+}
+
 void Value::set_value(const Value &value)
 {
   switch (value.attr_type_) {
@@ -206,6 +214,9 @@ void Value::set_value(const Value &value)
     } break;
     case AttrType::DATES: {
       set_date(value.get_int());
+    } break;
+    case AttrType::NULLS: {
+      set_null();
     } break;
     default: {
       ASSERT(false, "got an invalid value type");
@@ -238,7 +249,19 @@ const char *Value::data() const
 string Value::to_string() const
 {
   string res;
-  RC     rc = DataType::type_instance(this->attr_type_)->to_string(*this, res);
+  RC     rc;
+  if (is_null() && length_ == 0) {
+    return "NULL";
+  }
+  // 处理浮点除以0的结果
+  if (is_null() && length_ != 0) {
+    auto tmp_value = new Value(*this);
+    tmp_value->set_type(AttrType::FLOATS);
+    rc = DataType::type_instance(AttrType::FLOATS)->to_string(*tmp_value, res);
+    delete tmp_value;
+  } else {
+    rc = DataType::type_instance(this->attr_type_)->to_string(*this, res);
+  }
   if (OB_FAIL(rc)) {
     LOG_WARN("failed to convert value to string. type=%s", attr_type_to_string(this->attr_type_));
     return "";
@@ -248,6 +271,9 @@ string Value::to_string() const
 
 int Value::compare(const Value &other) const
 {
+  if (this->is_null() || other.is_null()) {
+    return INT32_MAX;  // 表示false比较 , unknown result
+  }
   return DataType::type_instance(this->attr_type_)->compare(*this, other);
 }
 

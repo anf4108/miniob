@@ -20,9 +20,8 @@ See the Mulan PSL v2 for more details. */
 using namespace std;
 
 ProjectPhysicalOperator::ProjectPhysicalOperator(vector<unique_ptr<Expression>> &&expressions)
-  : expressions_(std::move(expressions)), tuple_(expressions_)
-{
-}
+    : expressions_(std::move(expressions)), tuple_(expressions_)
+{}
 
 RC ProjectPhysicalOperator::open(Trx *trx)
 {
@@ -63,8 +62,24 @@ Tuple *ProjectPhysicalOperator::current_tuple()
 
 RC ProjectPhysicalOperator::tuple_schema(TupleSchema &schema) const
 {
+  // 当出现多表join时，可能会有多个表的字段需要输出
   for (const unique_ptr<Expression> &expression : expressions_) {
-    schema.append_cell(expression->name());
+    std::string column_name;
+    if (expression->type() == ExprType::FIELD) {
+      // 如果是字段表达式，获取表名和字段名，拼接成 "table_name.field_name"
+      FieldExpr  *field_expr = static_cast<FieldExpr *>(expression.get());
+      std::string field_name = field_expr->field_name();
+      if (field_expr->try_get_table_name_in_multi_table_query() != nullptr) {
+        std::string table_name = field_expr->try_get_table_name_in_multi_table_query();
+        column_name            = table_name + "." + field_name;
+      } else {
+        column_name = field_name;  // 如果没有表名，仅使用字段名
+      }
+    } else {
+      // 对于非字段表达式（例如计算表达式），使用 expression->name()
+      column_name = expression->name();
+    }
+    schema.append_cell(column_name.c_str());
   }
   return RC::SUCCESS;
 }

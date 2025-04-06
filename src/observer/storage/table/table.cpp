@@ -20,6 +20,7 @@ See the Mulan PSL v2 for more details. */
 #include "common/lang/span.h"
 #include "common/lang/algorithm.h"
 #include "common/lang/filesystem.h"
+#include "common/lang/bitmap.h"
 #include "common/log/log.h"
 #include "common/global_context.h"
 #include "storage/db/db.h"
@@ -343,12 +344,19 @@ RC Table::set_value_to_record(char *record_data, const Value &value, const Field
 {
   size_t       copy_len = field->len();
   const size_t data_len = value.length();
+  auto         bitmap   = common::Bitmap(record_data + table_meta_.null_bitmap_start(), table_meta_.field_num());
   if (field->type() == AttrType::CHARS) {
     if (copy_len > data_len) {
       copy_len = data_len + 1;
     }
   }
   memcpy(record_data + field->offset(), value.data(), copy_len);
+  // 用1表示这个字段为NULL
+  if (value.is_null()) {
+    bitmap.set_bit(field->field_id() - table_meta_.sys_field_num());
+  } else {
+    bitmap.clear_bit(field->field_id() - table_meta_.sys_field_num());
+  }
   return RC::SUCCESS;
 }
 

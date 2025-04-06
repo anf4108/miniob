@@ -61,7 +61,8 @@ RC SelectStmt::create(Db *db, SelectSqlNode &select_sql, Stmt *&stmt)
     table_map.insert({table_name, table});
   }
 
-  // collect query fields in `select` statement
+  // 绑定表达式，指的是将表达式中的字段和 table 关联起来
+  //  collect query fields in `select` statement
   vector<unique_ptr<Expression>> bound_expressions;
   ExpressionBinder               expression_binder(binder_context);
 

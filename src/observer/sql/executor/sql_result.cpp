@@ -64,7 +64,6 @@ RC SqlResult::next_tuple(Tuple *&tuple)
   if (rc != RC::SUCCESS) {
     return rc;
   }
-
   tuple = operator_->current_tuple();
   return rc;
 }

@@ -38,13 +38,23 @@ RC InsertStmt::create(Db *db, const InsertSqlNode &inserts, Stmt *&stmt)
   }
 
   // check the fields number
-  const Value     *values     = inserts.values.data();
-  const int        value_num  = static_cast<int>(inserts.values.size());
-  const TableMeta &table_meta = table->table_meta();
-  const int        field_num  = table_meta.field_num() - table_meta.sys_field_num();
+  const Value     *values        = inserts.values.data();
+  const int        value_num     = static_cast<int>(inserts.values.size());
+  const TableMeta &table_meta    = table->table_meta();
+  const int        field_num     = table_meta.field_num() - table_meta.sys_field_num();
+  const int        sys_field_num = table_meta.sys_field_num();
   if (field_num != value_num) {
     LOG_WARN("schema mismatch. value num=%d, field num in schema=%d", value_num, field_num);
     return RC::SCHEMA_FIELD_MISSING;
+  }
+
+  // check 是否符合NULLABLE限制
+  for (int i = table_meta.sys_field_num(); i < table_meta.field_num(); i++) {
+    const FieldMeta *field = table_meta.field(i);
+    if (field->nullable() && values[i - sys_field_num].is_null()) {
+      LOG_WARN("schema mismatch. field %s is not nullable", field->name());
+      return RC::SCHEMA_FIELD_TYPE_MISMATCH;
+    }
   }
   // loop LOG_INFO
   LOG_INFO("schema match. value num=%d, field num in schema=%d", value_num, field_num);

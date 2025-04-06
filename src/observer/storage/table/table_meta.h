@@ -53,6 +53,7 @@ public:
 
   int field_num() const;  // sys field included
   int sys_field_num() const;
+  int null_bitmap_start() const;
 
   const IndexMeta *index(const char *name) const;
   const IndexMeta *find_index_by_field(const char *field) const;
@@ -75,6 +76,6 @@ protected:
   vector<FieldMeta> fields_;  // 包含sys_fields
   vector<IndexMeta> indexes_;
   StorageFormat     storage_format_;
-
-  int record_size_ = 0;
+  int               null_bitmap_start_;  // null bitmap的起始位置
+  int               record_size_ = 0;
 };

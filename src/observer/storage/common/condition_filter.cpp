@@ -66,7 +66,7 @@ RC DefaultConditionFilter::init(Table &table, const ConditionSqlNode &condition)
   AttrType type_right = AttrType::UNDEFINED;
 
   // 这里的条件是一个表达式，可能是一个字段，也可能是一个值
-  // 接下来给我写出
+
   Expression *left_expr  = condition.left_expr.get();
   auto        right_expr = condition.right_expr.get();
   if (left_expr->type() == ExprType::VALUE) {
@@ -154,6 +154,10 @@ bool DefaultConditionFilter::filter(const Record &rec) const
   }
 
   int cmp_result = left_value.compare(right_value);
+  if (cmp_result == INT32_MAX) {
+    // 处理如果有一个值为NULL的情况
+    return false;
+  }
 
   switch (comp_op_) {
     case EQUAL_TO: return 0 == cmp_result;

@@ -183,7 +183,7 @@ class FieldExpr : public Expression
 public:
   FieldExpr() = default;
   FieldExpr(const Table *table, const FieldMeta *field) : field_(table, field) {}
-  FieldExpr(const Field &field) : field_(field) {}
+  FieldExpr(const Field &field, const char *table_name = nullptr) : field_(field), table_name_(table_name) {}
 
   virtual ~FieldExpr() = default;
 
@@ -199,13 +199,15 @@ public:
 
   const char *table_name() const { return field_.table_name(); }
   const char *field_name() const { return field_.field_name(); }
+  const char *try_get_table_name_in_multi_table_query() const { return table_name_; }
 
   RC get_column(Chunk &chunk, Column &column) override;
 
   RC get_value(const Tuple &tuple, Value &value) const override;
 
 private:
-  Field field_;
+  Field       field_;
+  const char *table_name_ = nullptr;  ///< 用于多表join时的表名
 };
 
 /**

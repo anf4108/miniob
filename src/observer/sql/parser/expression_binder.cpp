@@ -148,13 +148,17 @@ RC ExpressionBinder::bind_unbound_field_expression(
       LOG_INFO("cannot determine table for field: %s", field_name);
       return RC::SCHEMA_TABLE_NOT_EXIST;
     }
-
-    table = context_.query_tables()[0];
+    table_name = nullptr;
+    table      = context_.query_tables()[0];
   } else {
     table = context_.find_table(table_name);
     if (nullptr == table) {
       LOG_INFO("no such table in from list: %s", table_name);
       return RC::SCHEMA_TABLE_NOT_EXIST;
+    }
+    if (context_.query_tables().size() == 1) {
+      // 如果只有一个表，表名被省略
+      table_name = nullptr;
     }
   }
 
@@ -168,7 +172,7 @@ RC ExpressionBinder::bind_unbound_field_expression(
     }
 
     Field      field(table, field_meta);
-    FieldExpr *field_expr = new FieldExpr(field);
+    FieldExpr *field_expr = new FieldExpr(field, table_name);
     field_expr->set_name(field_name);
     bound_expressions.emplace_back(field_expr);
   }
