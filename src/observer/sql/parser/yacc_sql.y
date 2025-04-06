@@ -462,15 +462,18 @@ value:
       free(tmp);
     }
     | DATE {
-      // cast happened in here, 先用字符串进行存储
+      // 进行重构
       char *tmp = common::substr($1,1,strlen($1)-2);
       bool is_date = true;
       $$ = new Value(tmp, is_date);
+      if (!$$->is_valid_date()) {
+        $$->reset();
+      }
       context->add_object($$);
       free(tmp);
     }
     | NULL_T {
-      LOG_DEBUG("DEBUG: reduce NULL_T");
+      // LOG_DEBUG("DEBUG: reduce NULL_T");
       $$ = new Value();
       $$->set_null();
       context->add_object($$);
@@ -595,12 +598,14 @@ expression:
       $$ = create_arithmetic_expression(ArithmeticExpr::Type::NEGATIVE, $2, nullptr, sql_string, &@$, context);
     }
     | value {
+      LOG_DEBUG("DEBUG: reduce value expression");
       $$ = new ValueExpr(*$1);  // 拷贝构造
       context->add_object($$);
       $$->set_name(token_name(sql_string, &@$));
       delete $1;
     }
     | rel_attr {
+      LOG_DEBUG("DEBUG: reduce rel_attr expression");
       RelAttrSqlNode *node = $1;
       $$ = new UnboundFieldExpr(node->relation_name, node->attribute_name);
       context->add_object($$);
@@ -670,6 +675,7 @@ condition_list:
       $$ = nullptr;
     }
     | condition {
+      LOG_DEBUG("DEBUG: reduce condition");
       $$ = new vector<ConditionSqlNode>;
       context->add_object($$);
       $1->conjunction_type = ConjunctionType::NO_CONJUNCTION;

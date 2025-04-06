@@ -28,7 +28,7 @@ Value::Value(bool val) { set_boolean(val); }
 
 Value::Value(const char *s, int len /*= 0*/) { set_string(s, len); }
 
-Value::Value(const char *s, bool is_date) { set_string(s); }
+Value::Value(const char *s, bool is_date) { set_date(s); }
 
 Value::Value(const Value &other)
 {
@@ -190,6 +190,26 @@ void Value::set_date(int val)
   length_           = sizeof(val);
 }
 
+void Value::set_date(const char *date_str)
+{
+  reset();
+  attr_type_ = AttrType::DATES;
+  if (date_str == nullptr) {
+    value_.int_value_ = 0;
+    length_           = 0;
+  } else {
+    int        date_int = 0;
+    static int y, m, d;
+    if (sscanf(date_str, "%d-%d-%d", &y, &m, &d) != 3) {
+      LOG_WARN("failed to convert string to date. s=%s", date_str);
+      return;
+    }
+    date_int          = y * 10000 + m * 100 + d;
+    value_.int_value_ = date_int;
+    length_           = sizeof(date_int);
+  }
+}
+
 void Value::set_null()
 {
   reset();
@@ -343,6 +363,21 @@ float Value::get_float() const
 }
 
 string Value::get_string() const { return this->to_string(); }
+
+bool Value::is_valid_date() const
+{
+  if (attr_type_ != AttrType::DATES) {
+    LOG_WARN("invalid type. type=%d", attr_type_);
+    return false;
+  }
+  int              date_int = value_.int_value_;
+  int              y        = date_int / 10000;        // 获取年份
+  int              m        = (date_int / 100) % 100;  // 获取月份
+  int              d        = date_int % 100;          // 获取日期
+  static const int days[]   = {0, 31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31};
+  bool             leap     = (y % 4 == 0 && y % 100 != 0) || y % 400 == 0;
+  return (y > 0 && y <= 9999) && (m > 0 && m <= 12) && (d > 0 && d <= (days[m] + (m == 2 && leap ? 1 : 0)));
+}
 
 bool Value::get_boolean() const
 {
