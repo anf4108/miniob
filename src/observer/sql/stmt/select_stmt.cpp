@@ -66,6 +66,43 @@ RC SelectStmt::create(Db *db, SelectSqlNode &select_sql, Stmt *&stmt)
   vector<unique_ptr<Expression>> bound_expressions;
   ExpressionBinder               expression_binder(binder_context);
 
+  // 处理非聚合函数以及聚合函数, 保证非聚合函数对应的相关字段在group by中出现
+  bool has_aggregation = false;
+  for (unique_ptr<Expression> &expression : select_sql.expressions) {
+    if (expression->type() == ExprType::UNBOUND_AGGREGATION) {
+      has_aggregation = true;
+      break;
+    }
+  }
+  if (has_aggregation) {
+    for (unique_ptr<Expression> &select_expr : select_sql.expressions) {
+      if (select_expr->type() == ExprType::UNBOUND_AGGREGATION) {
+        continue;
+      }
+
+      // 聚合函数的算术运算
+      if (select_expr->type() == ExprType::ARITHMETIC) {
+        ArithmeticExpr *arith_expr = static_cast<ArithmeticExpr *>(select_expr.get());
+        if (arith_expr->left() != nullptr && arith_expr->left()->type() == ExprType::UNBOUND_AGGREGATION &&
+            arith_expr->right() != nullptr && arith_expr->right()->type() == ExprType::UNBOUND_AGGREGATION) {
+          continue;
+        }
+      }
+
+      bool found = false;
+      for (unique_ptr<Expression> &group_by_expr : select_sql.group_by) {
+        if (select_expr->equal(*group_by_expr)) {
+          found = true;
+          break;
+        }
+      }
+      if (!found) {
+        LOG_WARN("non-aggregation expression found in select statement but not in group by statement");
+        return RC::INVALID_ARGUMENT;
+      }
+    }
+  }
+
   for (unique_ptr<Expression> &expression : select_sql.expressions) {
     RC rc = expression_binder.bind_expression(expression, bound_expressions);
     if (OB_FAIL(rc)) {
@@ -74,6 +111,7 @@ RC SelectStmt::create(Db *db, SelectSqlNode &select_sql, Stmt *&stmt)
     }
   }
 
+  // 处理 group by
   vector<unique_ptr<Expression>> group_by_expressions;
   for (unique_ptr<Expression> &expression : select_sql.group_by) {
     RC rc = expression_binder.bind_expression(expression, group_by_expressions);

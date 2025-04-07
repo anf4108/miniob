@@ -33,6 +33,18 @@ ArithmeticExpr *create_arithmetic_expression(ArithmeticExpr::Type type,
     expr->set_name(token_name(sql_string, llocp));
     return expr;
 }
+UnboundAggregateExpr *create_aggregate_expression(
+    const char *aggregate_name,
+    std::unique_ptr<Expression> child,  // 改为接受unique_ptr
+    const char *sql_string,
+    YYLTYPE *llocp,
+    ParseContext *context) 
+{
+    UnboundAggregateExpr *expr = new UnboundAggregateExpr(aggregate_name, child.release());
+    context->add_object(expr);
+    expr->set_name(token_name(sql_string, llocp));
+    return expr;
+}
 
 UnboundAggregateExpr *create_aggregate_expression(const char *aggregate_name,
                                                  Expression *child,
@@ -156,6 +168,7 @@ UnboundAggregateExpr *create_aggregate_expression(const char *aggregate_name,
 %type <cstring>             storage_format
 %type <relation_list>       rel_list
 %type <expression>          expression
+%type <expression>          aggregate_func
 %type <expression_list>     expression_list
 %type <expression_list>     group_by
 %type <sql_node>            calc_stmt
@@ -192,7 +205,7 @@ commands: command_wrapper opt_semicolon  //commands or sqls. parser starts here.
   {
     unique_ptr<ParsedSqlNode> sql_node = unique_ptr<ParsedSqlNode>($1);
     sql_result->add_sql_node(std::move(sql_node));
-     context->remove_all_objects();
+    context->remove_all_objects();
   }
   ;
 
@@ -586,7 +599,6 @@ expression:
       $$ = create_arithmetic_expression(ArithmeticExpr::Type::MUL, $1, $3, sql_string, &@$, context);
     }
     | expression '/' expression {
-      LOG_DEBUG("DEBUG: reduce expression / expression");
       $$ = create_arithmetic_expression(ArithmeticExpr::Type::DIV, $1, $3, sql_string, &@$, context);
     }
     | LBRACE expression RBRACE {
@@ -598,14 +610,12 @@ expression:
       $$ = create_arithmetic_expression(ArithmeticExpr::Type::NEGATIVE, $2, nullptr, sql_string, &@$, context);
     }
     | value {
-      LOG_DEBUG("DEBUG: reduce value expression");
       $$ = new ValueExpr(*$1);  // 拷贝构造
       context->add_object($$);
       $$->set_name(token_name(sql_string, &@$));
       delete $1;
     }
     | rel_attr {
-      LOG_DEBUG("DEBUG: reduce rel_attr expression");
       RelAttrSqlNode *node = $1;
       $$ = new UnboundFieldExpr(node->relation_name, node->attribute_name);
       context->add_object($$);
@@ -616,7 +626,33 @@ expression:
       $$ = new StarExpr();
       context->add_object($$);
     }
+    // 聚合函数Reduce
+    | aggregate_func
+    {
+      $$ = $1;
+    }
     // your code here
+    ;
+
+aggregate_func:
+    ID LBRACE expression_list RBRACE {
+      if ($3->size() != 1) {
+        Expression *star = new StarExpr();
+        context->add_object(star);  // 注册 StarExpr
+        context->clear_object($3);  // 清除 $3 中的对象
+        $$ = create_aggregate_expression("MAX", star, sql_string, &@$, context);
+      } else {
+        Expression *child = $3->at(0).release();  // 转移所有权
+        context->remove_object(child);  // 从 context 中移除，因为它现在由 create_aggregate_expression 管理
+        context->clear_object($3);  // 清除 $3 中的对象
+        $$ = create_aggregate_expression($1, child, sql_string, &@$, context);
+      }
+    }
+    | ID LBRACE RBRACE {
+      Expression *star = new StarExpr();
+      context->add_object(star);  // 注册 StarExpr
+      $$ = create_aggregate_expression("MAX", star, sql_string, &@$, context);
+    }
     ;
 
 rel_attr:
@@ -783,7 +819,7 @@ int sql_parse(const char *s, ParsedSqlResult *sql_result) {
     yylex_init_extra(static_cast<void*>(&allocated_strings), &scanner);
     scan_string(s, scanner);
     int result = yyparse(s, sql_result, scanner, &context);
-
+    // context.clear();
     for (char *ptr : allocated_strings) {
         free(ptr);
     }

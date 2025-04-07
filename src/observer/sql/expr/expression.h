@@ -406,6 +406,11 @@ private:
   unique_ptr<Expression> right_;
 };
 
+/**
+ * @brief 未绑定的聚合表达式
+ * @ingroup Expression
+ * @details 该表达式在解析SQL语句时，无法确定具体的聚合函数
+ */
 class UnboundAggregateExpr : public Expression
 {
 public:
@@ -426,6 +431,10 @@ private:
   unique_ptr<Expression> child_;
 };
 
+/**
+ * @brief 聚合表达式
+ * @ingroup Expression
+ */
 class AggregateExpr : public Expression
 {
 public:

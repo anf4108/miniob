@@ -380,6 +380,17 @@ struct ParseContext
 
   void remove_all_objects() { allocated_objects.clear(); }
 
+  template <typename T>
+  void clear_object(T *obj)
+  {
+    auto it = std::find_if(
+        allocated_objects.begin(), allocated_objects.end(), [obj](const auto &pair) { return pair.first == obj; });
+    if (it != allocated_objects.end()) {
+      (*it->second)(it->first);
+      allocated_objects.erase(it);
+    }
+  }
+
   void clear()
   {
     for (auto &[ptr, deleter] : allocated_objects) {
