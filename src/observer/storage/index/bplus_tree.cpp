@@ -130,9 +130,8 @@ string to_string(const IndexNodeHandler &handler)
 {
   stringstream ss;
 
-  ss << "PageNum:" << handler.page_num() << ",is_leaf:" << handler.is_leaf() << ","
-     << "key_num:" << handler.size() << ","
-     << "parent:" << handler.parent_page_num() << ",";
+  ss << "PageNum:" << handler.page_num() << ",is_leaf:" << handler.is_leaf() << "," << "key_num:" << handler.size()
+     << "," << "parent:" << handler.parent_page_num() << ",";
 
   return ss.str();
 }
@@ -422,9 +421,8 @@ string to_string(const InternalIndexNodeHandler &node, const KeyPrinter &printer
 {
   stringstream ss;
   ss << to_string((const IndexNodeHandler &)node);
-  ss << ",children:["
-     << "{key:" << printer(node.__key_at(0)) << ","
-     << "value:" << *(PageNum *)node.__value_at(0) << "}";
+  ss << ",children:[" << "{key:" << printer(node.__key_at(0)) << "," << "value:" << *(PageNum *)node.__value_at(0)
+     << "}";
 
   for (int i = 1; i < node.size(); i++) {
     ss << ",{key:" << printer(node.__key_at(i)) << ",value:" << *(PageNum *)node.__value_at(i) << "}";

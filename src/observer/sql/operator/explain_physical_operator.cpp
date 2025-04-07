@@ -30,7 +30,7 @@ void ExplainPhysicalOperator::generate_physical_plan()
   stringstream ss;
   ss << "OPERATOR(NAME)\n";
 
-  int               level = 0;
+  int             level = 0;
   vector<uint8_t> ends;
   ends.push_back(1);
   const auto children_size = static_cast<int>(children_.size());
@@ -65,8 +65,8 @@ RC ExplainPhysicalOperator::next(Chunk &chunk)
   }
   generate_physical_plan();
 
-  Value         cell(physical_plan_.c_str());
-  auto column = make_unique<Column>();
+  Value cell(physical_plan_.c_str());
+  auto  column = make_unique<Column>();
   column->init(cell);
   chunk.add_column(std::move(column), 0);
   return RC::SUCCESS;
@@ -114,7 +114,7 @@ void ExplainPhysicalOperator::to_string(
   ends[level + 1] = 0;
 
   vector<unique_ptr<PhysicalOperator>> &children = oper->children();
-  const auto                                 size     = static_cast<int>(children.size());
+  const auto                            size     = static_cast<int>(children.size());
   for (auto i = 0; i < size - 1; i++) {
     to_string(os, children[i].get(), level + 1, false /*last_child*/, ends);
   }
