@@ -38,7 +38,7 @@ RC FilterStmt::create(Db *db, Table *default_table, std::unordered_map<std::stri
   // ConditionSqlNode --> ComparisionExpr --> ConjuctionExpr(默认都是AND) --> bindExpression
   stmt = nullptr;
   vector<unique_ptr<Expression>> bound_conditions;
-
+  vector<unique_ptr<Expression>> conditions_exprs;
   // 绑定条件表达式, 将条件表达式中的字段解析为具体的表字段
   BinderContext binder_context;
   for (auto &table : *tables) {
@@ -47,6 +47,7 @@ RC FilterStmt::create(Db *db, Table *default_table, std::unordered_map<std::stri
   ExpressionBinder expression_binder(binder_context);
 
   auto *tmp_stmt = new FilterStmt();
+  // 重构条件表达式
   for (auto &condition : conditions) {
     switch (condition.comp_op) {
       case CompOp::EQUAL_TO:
@@ -55,20 +56,20 @@ RC FilterStmt::create(Db *db, Table *default_table, std::unordered_map<std::stri
       case CompOp::LESS_THAN:
       case CompOp::GREAT_EQUAL:
       case CompOp::GREAT_THAN: {
+        conditions_exprs.emplace_back(
+            new ComparisonExpr(condition.comp_op, std::move(condition.left_expr), std::move(condition.right_expr)));
         unique_ptr<Expression> condition_expr(
             new ComparisonExpr(condition.comp_op, std::move(condition.left_expr), std::move(condition.right_expr)));
-        // 设置表达式名称
-        string name = std::string(dynamic_cast<ComparisonExpr *>(condition_expr.get())->left()->name()) + " ";
-        condition_expr->set_name(string(dynamic_cast<ComparisonExpr *>(condition_expr.get())->left()->name()) + " " +
-                                 comp_op_to_string(condition.comp_op) + " " +
-                                 dynamic_cast<ComparisonExpr *>(condition_expr.get())->right()->name());
-        RC rc = expression_binder.bind_expression(condition_expr, bound_conditions);
-        if (rc != RC::SUCCESS) {
-          delete tmp_stmt;
-          LOG_WARN("failed to bind expression. rc=%s, condition=%s", strrc(rc),
-              condition_expr->name());
-          return rc;
-        }
+        // // 设置表达式名称
+        // string name = std::string(dynamic_cast<ComparisonExpr *>(condition_expr.get())->left()->name()) + " ";
+        // condition_expr->set_name(string(dynamic_cast<ComparisonExpr *>(condition_expr.get())->left()->name()) + " " +
+        //                          comp_op_to_string(condition.comp_op) + " " +
+        //                          dynamic_cast<ComparisonExpr *>(condition_expr.get())->right()->name());
+      } break;
+      case CompOp::IS:
+      case CompOp::IS_NOT: {
+        conditions_exprs.emplace_back(
+            new IsExpr(condition.comp_op, std::move(condition.left_expr), std::move(condition.right_expr)));
       } break;
       default: {
         LOG_WARN("unsupported condition operator. comp_op=%d", condition.comp_op);
@@ -77,6 +78,15 @@ RC FilterStmt::create(Db *db, Table *default_table, std::unordered_map<std::stri
     }
   }
 
+  for (auto &condition : conditions_exprs) {
+    RC rc = expression_binder.bind_expression(condition, bound_conditions);
+    if (rc != RC::SUCCESS) {
+      delete tmp_stmt;
+      LOG_WARN("failed to bind expression. rc=%s, condition=%s", strrc(rc), condition->name());
+      return rc;
+    }
+  }
+  // 各个表达式名称在语法分析阶段就被设置好了
   tmp_stmt->conditions_.swap(bound_conditions);
 
   stmt = tmp_stmt;

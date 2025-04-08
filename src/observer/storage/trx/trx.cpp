@@ -40,6 +40,6 @@ TrxKit *TrxKit::create(const char *name)
     delete trx_kit;
     trx_kit = nullptr;
   }
-  
+
   return trx_kit;
 }

@@ -48,8 +48,8 @@ TEST(AggregateHashTableTest, DISABLED_standard_hash_table)
     ASSERT_EQ(rc, RC::SUCCESS);
     ASSERT_EQ(output_chunk.rows(), 8);
     for (int i = 0; i < 8; i++) {
-      std::cout << "column1: " << output_chunk.get_value(1, i).get_string() << " "
-                << "sum(column2)" << output_chunk.get_value(0, i).get_string() << std::endl;
+      std::cout << "column1: " << output_chunk.get_value(1, i).get_string() << " " << "sum(column2)"
+                << output_chunk.get_value(0, i).get_string() << std::endl;
     }
   }
   // mutiple group by columns, mutiple aggregate columns
@@ -133,8 +133,8 @@ TEST(AggregateHashTableTest, DISABLED_linear_probing_hash_table)
     ASSERT_EQ(rc, RC::SUCCESS);
     ASSERT_EQ(output_chunk.rows(), 8);
     for (int i = 0; i < 8; i++) {
-      std::cout << "column1: " << output_chunk.get_value(1, i).get_string() << " "
-                << "sum(column2)" << output_chunk.get_value(0, i).get_string() << std::endl;
+      std::cout << "column1: " << output_chunk.get_value(1, i).get_string() << " " << "sum(column2)"
+                << output_chunk.get_value(0, i).get_string() << std::endl;
     }
   }
 

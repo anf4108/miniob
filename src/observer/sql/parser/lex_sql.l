@@ -114,6 +114,7 @@ FLOAT                                   RETURN_TOKEN(FLOAT_T);
 DATE                                    RETURN_TOKEN(DATE_T);
 VECTOR                                  RETURN_TOKEN(VECTOR_T);
 NOT                                     RETURN_TOKEN(NOT);
+IS                                      RETURN_TOKEN(IS_TOKEN);
 NULL                                    RETURN_TOKEN(NULL_T);
 LOAD                                    RETURN_TOKEN(LOAD);
 DATA                                    RETURN_TOKEN(DATA);

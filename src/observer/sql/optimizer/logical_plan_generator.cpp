@@ -153,11 +153,22 @@ RC LogicalPlanGenerator::create_plan(FilterStmt *filter_stmt, unique_ptr<Logical
   vector<unique_ptr<Expression>> &expressions = filter_stmt->conditions();
   // 原本的逻辑中考虑到了类型之间转换的cost,是否需要考虑在Expr中实现或在本处实现?
   for (auto &expr : expressions) {
-    if (expr->type() != ExprType::COMPARISON) {
-      LOG_ERROR("invalid condition type, the condition should be comparison");
-      return RC::INVALID_ARGUMENT;
+    unique_ptr<Expression> cmp_expr(nullptr);
+    switch (expr->type()) {
+      case ExprType::COMPARISON: {
+        cmp_expr = unique_ptr<ComparisonExpr>(static_cast<ComparisonExpr *>(expr.release()));
+        break;
+      }
+      case ExprType::IS: {
+        cmp_expr = unique_ptr<IsExpr>(static_cast<IsExpr *>(expr.release()));
+        break;
+      }
+      default:
+        LOG_WARN("unsupported condition expression type: %d", static_cast<int>(expr->type()));
+        return RC::INVALID_ARGUMENT;
     }
-    cmp_exprs.emplace_back(static_cast<ComparisonExpr *>(expr.release()));
+
+    cmp_exprs.emplace_back(std::move(cmp_expr));
   }
 
   if (!cmp_exprs.empty()) {

@@ -214,7 +214,7 @@ void Value::set_null()
 {
   reset();
   attr_type_ = AttrType::NULLS;
-  length_    = 4;
+  length_    = 0;
 }
 
 void Value::set_value(const Value &value)

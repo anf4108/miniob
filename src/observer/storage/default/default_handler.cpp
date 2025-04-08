@@ -41,9 +41,9 @@ RC DefaultHandler::init(const char *base_dir, const char *trx_kit_name, const ch
     return RC::INTERNAL;
   }
 
-  base_dir_ = base_dir;
-  db_dir_   = db_dir;
-  trx_kit_name_ = trx_kit_name;
+  base_dir_         = base_dir;
+  db_dir_           = db_dir;
+  trx_kit_name_     = trx_kit_name;
   log_handler_name_ = log_handler_name;
 
   const char *sys_db = "sys";

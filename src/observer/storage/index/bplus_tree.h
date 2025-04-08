@@ -184,12 +184,9 @@ struct IndexFileHeader
   {
     stringstream ss;
 
-    ss << "attr_length:" << attr_length << ","
-       << "key_length:" << key_length << ","
-       << "attr_type:" << attr_type_to_string(attr_type) << ","
-       << "root_page:" << root_page << ","
-       << "internal_max_size:" << internal_max_size << ","
-       << "leaf_max_size:" << leaf_max_size << ";";
+    ss << "attr_length:" << attr_length << "," << "key_length:" << key_length << ","
+       << "attr_type:" << attr_type_to_string(attr_type) << "," << "root_page:" << root_page << ","
+       << "internal_max_size:" << internal_max_size << "," << "leaf_max_size:" << leaf_max_size << ";";
 
     return ss.str();
   }

@@ -41,7 +41,7 @@ RC PredicatePushdownRewriter::rewrite(unique_ptr<LogicalOperator> &oper, bool &c
     return rc;
   }
 
-  unique_ptr<Expression>             &predicate_expr = predicate_oper_exprs.front();
+  unique_ptr<Expression>        &predicate_expr = predicate_oper_exprs.front();
   vector<unique_ptr<Expression>> pushdown_exprs;
   rc = get_exprs_can_pushdown(predicate_expr, pushdown_exprs);
   if (rc != RC::SUCCESS) {
@@ -119,7 +119,7 @@ RC PredicatePushdownRewriter::get_exprs_can_pushdown(
     }
   } else if (expr->type() == ExprType::COMPARISON) {
     // 如果是比较操作，并且比较的左边或右边是表某个列值，那么就下推下去
-    auto   comparison_expr = static_cast<ComparisonExpr *>(expr.get());
+    auto comparison_expr = static_cast<ComparisonExpr *>(expr.get());
 
     unique_ptr<Expression> &left_expr  = comparison_expr->left();
     unique_ptr<Expression> &right_expr = comparison_expr->right();

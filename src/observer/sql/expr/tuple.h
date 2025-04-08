@@ -15,12 +15,14 @@ See the Mulan PSL v2 for more details. */
 #pragma once
 
 #include "common/log/log.h"
+#include "common/lang/bitmap.h"
 #include "sql/expr/expression.h"
 #include "sql/expr/tuple_cell.h"
 #include "sql/parser/parse.h"
 #include "common/value.h"
 #include "storage/record/record.h"
 
+using Bitmap = common::Bitmap;
 class Table;
 
 /**
@@ -167,7 +169,14 @@ public:
     speces_.clear();
   }
 
-  void set_record(Record *record) { this->record_ = record; }
+  void set_record(Record *record)
+  {
+    this->record_ = record;
+    if (record != nullptr) {
+      // 只考虑一行数据的元组记录
+      bitmap_ = std::make_unique<Bitmap>(record->data() + null_bitmap_start_, speces_.size());
+    }
+  }
 
   void set_schema(const Table *table, const vector<FieldMeta> *fields)
   {
@@ -182,6 +191,10 @@ public:
     for (const FieldMeta &field : *fields) {
       speces_.push_back(new FieldExpr(table, &field));
     }
+    null_bitmap_start_ = 0;
+    for (const auto &trxField : table->table_meta().trx_fields()) {
+      null_bitmap_start_ += trxField.len();
+    }
   }
 
   int cell_num() const override { return speces_.size(); }
@@ -195,6 +208,13 @@ public:
 
     FieldExpr       *field_expr = speces_[index];
     const FieldMeta *field_meta = field_expr->field().meta();
+
+    // 查询bitmap
+    if (bitmap_->get_bit(index)) {
+      cell.set_null();
+      return RC::SUCCESS;
+    }
+
     cell.set_type(field_meta->type());
     cell.set_data(this->record_->data() + field_meta->offset(), field_meta->len());
     return RC::SUCCESS;
@@ -245,6 +265,9 @@ private:
   Record             *record_ = nullptr;
   const Table        *table_  = nullptr;
   vector<FieldExpr *> speces_;
+  // 记录bitmap的NULL值相关信息
+  std::unique_ptr<Bitmap> bitmap_            = nullptr;
+  int                     null_bitmap_start_ = 0;
 };
 
 /**

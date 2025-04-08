@@ -24,7 +24,7 @@ void SumState<T>::update(const T *values, int size)
   }
 #else
   for (int i = 0; i < size; ++i) {
- 	  value += values[i];
+    value += values[i];
   }
 #endif
 }

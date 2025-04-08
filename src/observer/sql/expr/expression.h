@@ -46,6 +46,7 @@ enum class ExprType
   CONJUNCTION,  ///< 多个表达式使用同一种关系(AND或OR)来联结
   ARITHMETIC,   ///< 算术运算
   AGGREGATION,  ///< 聚合运算
+  IS,           ///< 判断是否为NULL or Bool
 };
 
 /**
@@ -477,4 +478,30 @@ public:
 private:
   Type                   aggregate_type_;
   unique_ptr<Expression> child_;
+};
+
+/**
+ * @brief IS 表达式
+ * @ingroup Expression
+ * IS 表达式，用于判断是否为 bool or null，因此右边的表达式必须是一个常量，
+ */
+class IsExpr : public Expression
+{
+public:
+  IsExpr(CompOp comp_op, std::unique_ptr<Expression> left, std::unique_ptr<Expression> right);
+  virtual ~IsExpr() = default;
+
+  ExprType type() const override { return ExprType::IS; }
+  int      value_length() const override { return sizeof(bool); }
+  RC       get_value(const Tuple &tuple, Value &value) const override;
+  AttrType value_type() const override { return AttrType::BOOLEANS; }
+  CompOp   comp() const { return comp_; }
+
+  unique_ptr<Expression> &left() { return left_; }
+  unique_ptr<Expression> &right() { return right_; }
+
+private:
+  CompOp                      comp_;  // 只允许 IS or IS_NOT
+  std::unique_ptr<Expression> left_;
+  std::unique_ptr<Expression> right_;
 };

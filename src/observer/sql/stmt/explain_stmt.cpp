@@ -28,6 +28,6 @@ RC ExplainStmt::create(Db *db, const ExplainSqlNode &explain, Stmt *&stmt)
   }
 
   unique_ptr<Stmt> child_stmt_ptr = unique_ptr<Stmt>(child_stmt);
-  stmt                                 = new ExplainStmt(std::move(child_stmt_ptr));
+  stmt                            = new ExplainStmt(std::move(child_stmt_ptr));
   return rc;
 }
