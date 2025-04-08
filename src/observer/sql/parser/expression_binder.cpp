@@ -94,6 +94,11 @@ RC ExpressionBinder::bind_expression(unique_ptr<Expression> &expr, vector<unique
     case ExprType::IS: {
       return bind_is_expression(expr, bound_expressions);
     } break;
+
+    case ExprType::LIKE: {
+      return bind_like_expression(expr, bound_expressions);
+    } break;
+
     default: {
       LOG_WARN("unknown expression type: %d", static_cast<int>(expr->type()));
       return RC::INTERNAL;
@@ -490,6 +495,55 @@ RC ExpressionBinder::bind_is_expression(unique_ptr<Expression> &expr, vector<uni
     LOG_WARN("right expression of IS must be a constant");
     return RC::INVALID_ARGUMENT;
   }
+
+  RC rc = bind_expression(left_expr, child_bound_expressions);
+  if (rc != RC::SUCCESS) {
+    return rc;
+  }
+
+  if (child_bound_expressions.size() != 1) {
+    LOG_WARN("invalid left children number of comparison expression: %d", child_bound_expressions.size());
+    return RC::INVALID_ARGUMENT;
+  }
+
+  unique_ptr<Expression> &left = child_bound_expressions[0];
+  if (left.get() != left_expr.get()) {
+    left_expr.reset(left.release());
+  }
+
+  child_bound_expressions.clear();
+
+  rc = bind_expression(right_expr, child_bound_expressions);
+  if (rc != RC::SUCCESS) {
+    return rc;
+  }
+
+  if (child_bound_expressions.size() != 1) {
+    LOG_WARN("invalid right children number of comparison expression: %d", child_bound_expressions.size());
+    return RC::INVALID_ARGUMENT;
+  }
+
+  unique_ptr<Expression> &right = child_bound_expressions[0];
+  if (right.get() != right_expr.get()) {
+    right_expr.reset(right.release());
+  }
+
+  bound_expressions.emplace_back(std::move(expr));
+  return RC::SUCCESS;
+}
+
+RC ExpressionBinder::bind_like_expression(
+    unique_ptr<Expression> &expr, vector<unique_ptr<Expression>> &bound_expressions)
+{
+  if (nullptr == expr) {
+    return RC::SUCCESS;
+  }
+
+  auto like_expr = static_cast<LikeExpr *>(expr.get());
+
+  vector<unique_ptr<Expression>> child_bound_expressions;
+  unique_ptr<Expression>        &left_expr  = like_expr->left();
+  unique_ptr<Expression>        &right_expr = like_expr->right();
 
   RC rc = bind_expression(left_expr, child_bound_expressions);
   if (rc != RC::SUCCESS) {

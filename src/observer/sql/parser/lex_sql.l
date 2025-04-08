@@ -115,6 +115,7 @@ DATE                                    RETURN_TOKEN(DATE_T);
 VECTOR                                  RETURN_TOKEN(VECTOR_T);
 NOT                                     RETURN_TOKEN(NOT);
 IS                                      RETURN_TOKEN(IS_TOKEN);
+LIKE                                    RETURN_TOKEN(LIKE);
 NULL                                    RETURN_TOKEN(NULL_T);
 LOAD                                    RETURN_TOKEN(LOAD);
 DATA                                    RETURN_TOKEN(DATA);

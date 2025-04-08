@@ -60,7 +60,7 @@ RC FilterStmt::create(Db *db, Table *default_table, std::unordered_map<std::stri
             new ComparisonExpr(condition.comp_op, std::move(condition.left_expr), std::move(condition.right_expr)));
         unique_ptr<Expression> condition_expr(
             new ComparisonExpr(condition.comp_op, std::move(condition.left_expr), std::move(condition.right_expr)));
-        // // 设置表达式名称
+        // // 设置表达式名称???
         // string name = std::string(dynamic_cast<ComparisonExpr *>(condition_expr.get())->left()->name()) + " ";
         // condition_expr->set_name(string(dynamic_cast<ComparisonExpr *>(condition_expr.get())->left()->name()) + " " +
         //                          comp_op_to_string(condition.comp_op) + " " +
@@ -70,6 +70,11 @@ RC FilterStmt::create(Db *db, Table *default_table, std::unordered_map<std::stri
       case CompOp::IS_NOT: {
         conditions_exprs.emplace_back(
             new IsExpr(condition.comp_op, std::move(condition.left_expr), std::move(condition.right_expr)));
+      } break;
+      case CompOp::LIKE_OP:
+      case CompOp::NOT_LIKE_OP: {
+        conditions_exprs.emplace_back(
+            new LikeExpr(condition.comp_op, std::move(condition.left_expr), std::move(condition.right_expr)));
       } break;
       default: {
         LOG_WARN("unsupported condition operator. comp_op=%d", condition.comp_op);
