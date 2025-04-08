@@ -30,6 +30,8 @@ ArithmeticExpr *create_arithmetic_expression(ArithmeticExpr::Type type,
     // when facing problems, I will add more code here. 
     // 或许可以考虑unique_ptr包装所有的函数?
     context->add_object(expr);
+    context->remove_object(left);
+    context->remove_object(right);
     expr->set_name(token_name(sql_string, llocp));
     return expr;
 }
@@ -42,6 +44,7 @@ UnboundAggregateExpr *create_aggregate_expression(
 {
     UnboundAggregateExpr *expr = new UnboundAggregateExpr(aggregate_name, child.release());
     context->add_object(expr);
+    context->remove_object(child.get());  // 移除child的所有权
     expr->set_name(token_name(sql_string, llocp));
     return expr;
 }
