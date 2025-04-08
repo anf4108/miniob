@@ -171,6 +171,7 @@ UnboundAggregateExpr *create_aggregate_expression(const char *aggregate_name,
 %type <relation_list>       rel_list
 %type <expression>          expression
 %type <expression>          aggregate_func
+// %type <expression>          sys_func
 %type <expression_list>     expression_list
 %type <expression_list>     group_by
 %type <sql_node>            calc_stmt
@@ -615,6 +616,7 @@ expression:
       $$ = new ValueExpr(*$1);  // 拷贝构造
       context->add_object($$);
       $$->set_name(token_name(sql_string, &@$));
+      context->remove_object($1);
       delete $1;
     }
     | rel_attr {
@@ -622,6 +624,7 @@ expression:
       $$ = new UnboundFieldExpr(node->relation_name, node->attribute_name);
       context->add_object($$);
       $$->set_name(token_name(sql_string, &@$));
+      context->remove_object($1);
       delete $1;
     }
     | '*' {
@@ -634,6 +637,9 @@ expression:
     {
       $$ = $1;
     }
+    // | sys_func {
+    //   $$ = $1;
+    // }
     // your code here
     ;
 
@@ -657,6 +663,9 @@ aggregate_func:
       $$ = create_aggregate_expression("MAX", star, sql_string, &@$, context);
     }
     ;
+
+// sys_func:
+
 
 rel_attr:
     ID {
