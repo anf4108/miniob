@@ -65,6 +65,16 @@ RC ExpressionIterator::iterate_child_expr(Expression &expr, function<RC(unique_p
       rc                   = callback(aggregate_expr.child());
     } break;
 
+    case ExprType::SYS_FUNCTION: {
+      auto &sys_function_expr = static_cast<SysFunctionExpr &>(expr);
+      for (auto &param : sys_function_expr.params()) {
+        rc = callback(param);
+        if (OB_FAIL(rc)) {
+          break;
+        }
+      }
+    } break;
+
     case ExprType::NONE:
     case ExprType::STAR:
     case ExprType::UNBOUND_FIELD:

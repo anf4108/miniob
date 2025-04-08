@@ -15,6 +15,8 @@ See the Mulan PSL v2 for more details. */
 #include "sql/expr/expression.h"
 #include "sql/expr/tuple.h"
 #include "sql/expr/arithmetic_operator.hpp"
+#include "common/lang/iomanip.h"
+#include "common/lang/sstream.h"
 
 using namespace std;
 
@@ -611,6 +613,167 @@ RC AggregateExpr::type_from_string(const char *type_str, AggregateExpr::Type &ty
   return rc;
 }
 
+////////////////////////////////////////////////////////////////////////////////
+AttrType SysFunctionExpr::value_type() const
+{
+  switch (sys_func_type_) {
+    case SysFuncType::DATE_FORMAT: return AttrType::DATES;
+    case SysFuncType::LENGTH: return AttrType::CHARS;
+    case SysFuncType::ROUND: return AttrType::FLOATS;
+    default: return AttrType::UNDEFINED;
+  }
+  return AttrType::UNDEFINED;
+}
+
+RC SysFunctionExpr::check_params_type_and_number() const
+{
+  switch (sys_func_type_) {
+    case SysFuncType::DATE_FORMAT: {
+      if (params_.size() != 2) {
+        LOG_WARN("DATE_FORMAT function must have two parameters");
+        return RC::INVALID_ARGUMENT;
+      }
+      /// TODO: check the type of params
+      break;
+    }
+    case SysFuncType::LENGTH: {
+      if (params_.size() != 1 && params_[0]->value_type() != this->value_type()) {
+        LOG_WARN("LENGTH function must have one parameter, which is chars type");
+        return RC::INVALID_ARGUMENT;
+      }
+      break;
+    }
+    case SysFuncType::ROUND: {
+      /// TODO: check the type of params
+      if (params_.size() != 2 && params_[0]->value_type() != AttrType::FLOATS &&
+          params_[1]->value_type() != AttrType::INTS) {
+        LOG_WARN("ROUND function must have two parameters, the first is float and the second is int");
+        return RC::INVALID_ARGUMENT;
+      }
+      break;
+    }
+    default: {
+      LOG_WARN("unsupported sys function type. %d", sys_func_type_);
+      return RC::UNIMPLEMENTED;
+    }
+  }
+  return RC::SUCCESS;
+}
+
+RC SysFunctionExpr::get_func_length_value(const Tuple &tuple, Value &value) const
+{
+  RC    rc = RC::SUCCESS;
+  Value param;
+  rc = params_[0]->get_value(tuple, param);
+  if (rc != RC::SUCCESS) {
+    LOG_WARN("failed to get value of first parameter. rc=%s", strrc(rc));
+    return rc;
+  }
+  if (param.attr_type() != AttrType::CHARS) {
+    LOG_WARN("LENGTH function's parameter must be CHAR");
+    return RC::INVALID_ARGUMENT;
+  }
+  int len = strlen(param.get_string().c_str());
+  value.set_int(len);
+  return rc;
+}
+
+RC SysFunctionExpr::get_func_round_value(const Tuple &tuple, Value &value) const
+{
+  RC    rc = RC::SUCCESS;
+  Value param1;
+  Value param2;
+  rc = params_[0]->get_value(tuple, param1);
+  if (rc != RC::SUCCESS) {
+    LOG_WARN("failed to get value of first parameter. rc=%s", strrc(rc));
+    return rc;
+  }
+  rc = params_[1]->get_value(tuple, param2);
+  if (rc != RC::SUCCESS) {
+    LOG_WARN("failed to get value of second parameter. rc=%s", strrc(rc));
+    return rc;
+  }
+  float        value1 = param1.get_float();
+  int          value2 = param2.get_int();
+  stringstream ss;
+  ss << fixed << setprecision(value2) << value1;
+  ss >> value1;
+  value.set_float(value1);
+  return rc;
+}
+
+/// TODO: Don't how it should work???
+RC SysFunctionExpr::get_func_date_format_value(const Tuple &tuple, Value &value) const
+{
+  RC rc = RC::SUCCESS;
+  // if (params_.size() != 2) {
+  //   LOG_WARN("DATE_FORMAT function must have two parameters");
+  //   return RC::INVALID_ARGUMENT;
+  // }
+  // Value param1;
+  // Value param2;
+  // rc = params_[0]->get_value(tuple, param1);
+  // if (rc != RC::SUCCESS) {
+  //   LOG_WARN("failed to get value of first parameter. rc=%s", strrc(rc));
+  //   return rc;
+  // }
+  // rc = params_[1]->get_value(tuple, param2);
+  // if (rc != RC::SUCCESS) {
+  //   LOG_WARN("failed to get value of second parameter. rc=%s", strrc(rc));
+  //   return rc;
+  // }
+  // if (param1.attr_type() != AttrType::DATES || param2.attr_type() != AttrType::CHARS) {
+  //   LOG_WARN("DATE_FORMAT function's first parameter must be DATE and second parameter must be CHAR");
+  //   return RC::INVALID_ARGUMENT;
+  // }
+  // const char *date_format = param2.get_string();
+  // value.set_date_format(param1.get_date(), date_format);
+  return rc;
+}
+
+RC SysFunctionExpr::try_get_func_length_value(Value &value) const
+{
+  RC    rc = RC::SUCCESS;
+  Value param;
+  rc = params_[0]->try_get_value(param);
+  if (rc != RC::SUCCESS) {
+    LOG_WARN("failed to get value of first parameter. rc=%s", strrc(rc));
+    return rc;
+  }
+  if (param.attr_type() != AttrType::CHARS) {
+    LOG_WARN("LENGTH function's parameter must be CHAR");
+    return RC::INVALID_ARGUMENT;
+  }
+  int len = strlen(param.get_string().c_str());
+  value.set_int(len);
+  return rc;
+}
+
+RC SysFunctionExpr::try_get_func_round_value(Value &value) const
+{
+  RC    rc = RC::SUCCESS;
+  Value param1;
+  Value param2;
+  rc = params_[0]->try_get_value(param1);
+  if (rc != RC::SUCCESS) {
+    LOG_WARN("failed to get value of first parameter. rc=%s", strrc(rc));
+    return rc;
+  }
+  rc = params_[1]->try_get_value(param2);
+  if (rc != RC::SUCCESS) {
+    LOG_WARN("failed to get value of second parameter. rc=%s", strrc(rc));
+    return rc;
+  }
+  float        value1 = param1.get_float();
+  int          value2 = param2.get_int();
+  stringstream ss;
+  ss << fixed << setprecision(value2) << value1;
+  ss >> value1;
+  value.set_float(value1);
+  return rc;
+}
+
+RC SysFunctionExpr::try_get_func_date_format_value(Value &value) const { return RC::SUCCESS; }
 ////////////////////////////////////////////////////////////////////////////////
 IsExpr::IsExpr(CompOp comp_op, std::unique_ptr<Expression> left, std::unique_ptr<Expression> right)
     : comp_(comp_op), left_(std::move(left)), right_(std::move(right))

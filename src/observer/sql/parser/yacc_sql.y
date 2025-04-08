@@ -56,6 +56,7 @@ UnboundAggregateExpr *create_aggregate_expression(const char *aggregate_name,
                                                  ParseContext *context) {
     UnboundAggregateExpr *expr = new UnboundAggregateExpr(aggregate_name, child);
     context->add_object(expr);
+    context->remove_object(child);
     expr->set_name(token_name(sql_string, llocp));
     return expr;
 }
@@ -128,6 +129,9 @@ UnboundAggregateExpr *create_aggregate_expression(const char *aggregate_name,
         NE
         IS_TOKEN
         LIKE
+        SYS_LENGTH
+        SYS_ROUND
+        SYS_DATE_FORMAT
 
 /** union 中定义各种数据类型，真实生成的代码也是union类型，所以不能有非POD类型的数据 **/
 %union {
@@ -135,6 +139,7 @@ UnboundAggregateExpr *create_aggregate_expression(const char *aggregate_name,
   ConditionSqlNode *                         condition;
   Value *                                    value;
   enum CompOp                                comp;
+  enum SysFuncType                           functype;
   RelAttrSqlNode *                           rel_attr;
   vector<AttrInfoSqlNode> *             attr_infos;
   AttrInfoSqlNode *                          attr_info;
@@ -162,6 +167,7 @@ UnboundAggregateExpr *create_aggregate_expression(const char *aggregate_name,
 %type <condition>           condition
 %type <value>               value
 %type <number>              number
+%type <functype>            sys_func_type
 %type <cstring>             relation
 %type <comp>                comp_op
 %type <rel_attr>            rel_attr
@@ -174,7 +180,7 @@ UnboundAggregateExpr *create_aggregate_expression(const char *aggregate_name,
 %type <relation_list>       rel_list
 %type <expression>          expression
 %type <expression>          aggregate_func
-// %type <expression>          sys_func
+%type <expression>          sys_func
 %type <expression_list>     expression_list
 %type <expression_list>     group_by
 %type <sql_node>            calc_stmt
@@ -492,7 +498,6 @@ value:
       free(tmp);
     }
     | NULL_T {
-      // LOG_DEBUG("DEBUG: reduce NULL_T");
       $$ = new Value();
       $$->set_null();
       context->add_object($$);
@@ -536,7 +541,15 @@ update_stmt:      /*  update 语句的语法解析树*/
     }
     ;
 select_stmt:        /*  select 语句的语法解析树*/
-    SELECT expression_list FROM rel_list where group_by
+    SELECT expression_list {
+      $$ = new ParsedSqlNode(SCF_SELECT);
+      context->add_object($$);
+      if ($2 != nullptr) {
+        $$->selection.expressions.swap(*$2);
+        delete $2;
+      }
+    }
+    | SELECT expression_list FROM rel_list where group_by
     {
       LOG_DEBUG("DEBUG: select_stmt");
       $$ = new ParsedSqlNode(SCF_SELECT);
@@ -567,6 +580,7 @@ select_stmt:        /*  select 语句的语法解析树*/
 calc_stmt:
     CALC expression_list
     {
+      LOG_DEBUG("DEBUG: reduce calc_stmt");
       $$ = new ParsedSqlNode(SCF_CALC);
       context->add_object($$);
       $$->calc.expressions.swap(*$2);
@@ -590,6 +604,7 @@ expression_list:
         $$ = new vector<unique_ptr<Expression>>;
         context->add_object($$);
       }
+      // push to front
       $$->emplace($$->begin(), $1);
       context->remove_object($1);
     }
@@ -640,9 +655,9 @@ expression:
     {
       $$ = $1;
     }
-    // | sys_func {
-    //   $$ = $1;
-    // }
+    | sys_func {
+      $$ = $1;
+    }
     // your code here
     ;
 
@@ -667,8 +682,23 @@ aggregate_func:
     }
     ;
 
-// sys_func:
+sys_func_type:
+    SYS_LENGTH { $$ = SysFuncType::LENGTH; }
+    | SYS_ROUND { $$ = SysFuncType::ROUND; }
+    | SYS_DATE_FORMAT { $$ = SysFuncType::DATE_FORMAT; }
+    ;
 
+sys_func:
+  sys_func_type LBRACE expression_list RBRACE
+  {
+    LOG_DEBUG("DEBUG: reduce sys_func");
+    $$ = new SysFunctionExpr($1,*$3); // 拷贝构造
+    $$->set_name(token_name(sql_string, &@$));
+    context->add_object($$);
+    delete $3; // 释放 expression_list
+    context->remove_object($3);
+  }
+  ;
 
 rel_attr:
     ID {

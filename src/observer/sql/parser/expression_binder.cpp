@@ -62,6 +62,10 @@ RC ExpressionBinder::bind_expression(unique_ptr<Expression> &expr, vector<unique
       return bind_aggregate_expression(expr, bound_expressions);
     } break;
 
+    case ExprType::SYS_FUNCTION: {
+      return bind_sys_function_expression(expr, bound_expressions);
+    } break;
+
     case ExprType::FIELD: {
       return bind_field_expression(expr, bound_expressions);
     } break;
@@ -475,6 +479,51 @@ RC ExpressionBinder::bind_aggregate_expression(
   }
 
   bound_expressions.emplace_back(std::move(aggregate_expr));
+  return RC::SUCCESS;
+}
+
+RC ExpressionBinder::bind_sys_function_expression(
+    unique_ptr<Expression> &expr, vector<unique_ptr<Expression>> &bound_expressions)
+{
+  // check sys function's params type and number
+  if (nullptr == expr) {
+    return RC::SUCCESS;
+  }
+  auto unbound_sys_function_expr = static_cast<SysFunctionExpr *>(expr.get());
+  RC   rc                        = RC::SUCCESS;
+
+  // bind sys function's params
+  vector<unique_ptr<Expression>>  child_bound_expressions;
+  vector<unique_ptr<Expression>> &params = unbound_sys_function_expr->params();
+  for (unique_ptr<Expression> &param : params) {
+    child_bound_expressions.clear();
+    rc = bind_expression(param, child_bound_expressions);
+    if (OB_FAIL(rc)) {
+      LOG_WARN("bind sys function's param failed. rc=%s", strrc(rc));
+      return rc;
+    }
+
+    if (child_bound_expressions.size() != 1) {
+      LOG_WARN("invalid children number of sys function expression: %d", child_bound_expressions.size());
+      return RC::INVALID_ARGUMENT;
+    }
+
+    if (child_bound_expressions[0].get() != param.get()) {
+      param.reset(child_bound_expressions[0].release());
+    }
+  }
+  // create sys function expression
+  // Params 是否内存泄漏???
+  auto sys_function = make_unique<SysFunctionExpr>(unbound_sys_function_expr->sys_func_type(), params);
+  sys_function->set_name(unbound_sys_function_expr->name());
+
+  // check sys function's params type and number
+  rc = sys_function->check_params_type_and_number();
+  if (OB_FAIL(rc)) {
+    LOG_WARN("check sys function's params type and number failed. rc=%s", strrc(rc));
+    return rc;
+  }
+  bound_expressions.emplace_back(std::move(sys_function));
   return RC::SUCCESS;
 }
 

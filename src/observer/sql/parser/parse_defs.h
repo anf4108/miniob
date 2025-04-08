@@ -88,6 +88,12 @@ enum ConjunctionType
   NO_CONJUNCTION
 };
 
+enum SysFuncType
+{
+  LENGTH,
+  ROUND,
+  DATE_FORMAT
+};
 /**
  * @brief 表示一个条件比较
  * @ingroup SQLParser
