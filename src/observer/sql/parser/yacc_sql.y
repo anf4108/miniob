@@ -123,6 +123,7 @@ UnboundAggregateExpr *create_aggregate_expression(const char *aggregate_name,
         LE
         GE
         NE
+        IS_TOKEN
 
 /** union 中定义各种数据类型，真实生成的代码也是union类型，所以不能有非POD类型的数据 **/
 %union {
@@ -625,6 +626,7 @@ expression:
     | '*' {
       $$ = new StarExpr();
       context->add_object($$);
+      $$->set_name(token_name(sql_string, &@$));
     }
     // 聚合函数Reduce
     | aggregate_func
@@ -734,7 +736,6 @@ condition_list:
 condition:
     expression comp_op expression
     {
-      LOG_DEBUG("DEBUG: reduce expression comp_op expression");
       $$ = new ConditionSqlNode;
       context->add_object($$);
       $$->comp_op = $2;
@@ -750,6 +751,8 @@ comp_op:
     | LE { $$ = LESS_EQUAL; }
     | GE { $$ = GREAT_EQUAL; }
     | NE { $$ = NOT_EQUAL; }
+    | IS_TOKEN { $$ = CompOp::IS; }
+    | IS_TOKEN NOT { $$ = IS_NOT; }
     ;
 
 // your code here

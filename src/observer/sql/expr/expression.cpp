@@ -610,3 +610,50 @@ RC AggregateExpr::type_from_string(const char *type_str, AggregateExpr::Type &ty
   }
   return rc;
 }
+
+////////////////////////////////////////////////////////////////////////////////
+IsExpr::IsExpr(CompOp comp_op, std::unique_ptr<Expression> left, std::unique_ptr<Expression> right)
+    : comp_(comp_op), left_(std::move(left)), right_(std::move(right))
+{}
+
+RC IsExpr::get_value(const Tuple &tuple, Value &value) const
+{
+  RC rc = RC::SUCCESS;
+  if (comp_ != CompOp::IS && comp_ != CompOp::IS_NOT) {
+    LOG_WARN("unsupported IS expression. %d", comp_);
+    return RC::INTERNAL;
+  }
+  if (right_->type() != ExprType::VALUE) {
+    LOG_WARN("right expression of IS must be a constant");
+    return RC::INVALID_ARGUMENT;
+  }
+  Value left_value;
+  Value right_value;
+  rc = left_->get_value(tuple, left_value);
+  if (rc != RC::SUCCESS) {
+    LOG_WARN("failed to get value of left expression. rc=%s", strrc(rc));
+    return rc;
+  }
+  rc = right_->get_value(tuple, right_value);
+  if (rc != RC::SUCCESS) {
+    LOG_WARN("failed to get value of right expression. rc=%s", strrc(rc));
+    return rc;
+  }
+  if (right_value.is_null()) {
+    if (comp_ == CompOp::IS) {
+      value.set_boolean(left_value.is_null());
+    } else {
+      value.set_boolean(!left_value.is_null());
+    }
+  } else if (right_value.attr_type() == AttrType::BOOLEANS) {
+    if (comp_ == CompOp::IS) {
+      value.set_boolean(left_value.get_boolean() == right_value.get_boolean());
+    } else {
+      value.set_boolean(left_value.get_boolean() != right_value.get_boolean());
+    }
+  } else {
+    LOG_WARN("right expression of IS must be a boolean constant");
+    return RC::INVALID_ARGUMENT;
+  }
+  return RC::SUCCESS;
+}

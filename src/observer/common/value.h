@@ -109,7 +109,7 @@ public:
   {
     if (value.is_null()) {
       // result.set_type(to_type);
-      // result.set_null();
+      result.set_null();
       return RC::SUCCESS;
     }
     return DataType::type_instance(value.attr_type())->cast_to(value, to_type, result);

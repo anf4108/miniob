@@ -51,6 +51,8 @@ enum CompOp
   LESS_THAN,    ///< "<"
   GREAT_EQUAL,  ///< ">="
   GREAT_THAN,   ///< ">"
+  IS,           ///< "IS"
+  IS_NOT,       ///< "IS NOT"
   NO_OP
 };
 
@@ -63,6 +65,8 @@ inline const char *comp_op_to_string(CompOp op)
     case LESS_THAN: return "<";
     case GREAT_EQUAL: return ">=";
     case GREAT_THAN: return ">";
+    case IS: return "IS";
+    case IS_NOT: return "IS NOT";
     default: return "";
   }
 }  // namespace common
