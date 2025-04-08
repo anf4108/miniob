@@ -657,3 +657,153 @@ RC IsExpr::get_value(const Tuple &tuple, Value &value) const
   }
   return RC::SUCCESS;
 }
+////////////////////////////////////////////////////////////////////////////////
+
+enum class LIKE_RESULT
+{
+  LIKE_TRUE,   // like 匹配成功
+  LIKE_FALSE,  // like 匹配失败
+  LIKE_ABORT   // 内部使用,表示 s 用完而 pattern 还有剩
+};
+
+static LIKE_RESULT string_like_internal(const char *s, const char *p)
+{
+  int sLen = strlen(s);
+  int pLen = strlen(p);
+  if (pLen == 1 && p[0] == '%') {
+    return LIKE_RESULT::LIKE_TRUE;
+  }
+  while (pLen > 0 && sLen > 0) {
+    if (*p == '\\') {  // 转移后可以匹配元字符
+      p++;
+      pLen--;
+      if (*p != *s) {
+        return LIKE_RESULT::LIKE_FALSE;
+      }
+    } else if (*p == '%') {
+      p++;
+      pLen--;
+
+      // 滑过 % 和 _ ，找到之后的第一个普通字符
+      while (pLen > 0) {
+        if (*p == '%') {
+          p++;
+          pLen--;
+        } else if (*p == '_') {
+          if (sLen <= 0) {
+            return LIKE_RESULT::LIKE_ABORT;
+          }
+          p++;
+          pLen--;
+          s++;
+          sLen--;
+        } else {
+          break;
+        }
+      }
+      // pattern 以 % 和 _ 结尾
+      if (pLen <= 0) {
+        return LIKE_RESULT::LIKE_TRUE;
+      }
+      char firstpat;
+      if (*p == '\\') {
+        ASSERT(pLen < 2, "LIKE pattern must not end with escape character");
+        firstpat = p[1];
+      } else {
+        firstpat = *p;
+      }
+
+      // 找到 s 中 firstpat 开头的子串，递归匹配
+      while (sLen > 0) {
+        if (*s == firstpat) {
+          LIKE_RESULT matched = string_like_internal(s, p);
+          // 返回 LIKE_TRUE 匹配成功,直接返回
+          // 返回 LIKE_ABORT 此处 s 的长度已经不足 pattern 完成匹配, 下一次循环 s 的长度更短,不必继续递归.快速终止匹配
+          // 返回 LIKE_FALSE 匹配失败,尝试下一个firstpat 开头的子串
+          if (matched != LIKE_RESULT::LIKE_FALSE) {
+            return matched;
+          }
+        }
+        s++;
+        sLen--;
+      }
+      // 此处 sLen < 0， 说明 s 用尽而 pattern 有剩余
+      return LIKE_RESULT::LIKE_ABORT;
+
+    } else if (*p == '_') {
+      // nop
+    } else if (*p != *s) {
+      return LIKE_RESULT::LIKE_FALSE;
+    }
+    p++;
+    pLen--;
+    s++;
+    sLen--;
+  }
+
+  // pattern 已经结束, s 还没有结束
+  if (sLen > 0) {
+    return LIKE_RESULT::LIKE_FALSE;
+  }
+
+  // s 已经结束，pattern 中还剩若干 % ，可以匹配空字符
+  // 此逻辑也能处理 pattern 也结束的情况( pattern 还剩零个 % )
+  while (pLen > 0 && *p == '%') {
+    p++;
+    pLen--;
+  }
+  if (pLen <= 0) {
+    return LIKE_RESULT::LIKE_TRUE;
+  }
+
+  // pLen > 0, s 已经结束, pattern 去掉 % 后仍有其他字符, 无法匹配
+  return LIKE_RESULT::LIKE_ABORT;
+}
+
+bool string_like(const char *s, const char *p) { return string_like_internal(s, p) == LIKE_RESULT::LIKE_TRUE; }
+
+LikeExpr::LikeExpr(CompOp comp_op, std::unique_ptr<Expression> left, std::unique_ptr<Expression> right)
+    : comp_(comp_op), left_(std::move(left)), right_(std::move(right))
+{}
+
+RC LikeExpr::get_value(const Tuple &tuple, Value &value) const
+{
+  RC rc = RC::SUCCESS;
+  if (comp_ != CompOp::LIKE_OP && comp_ != CompOp::NOT_LIKE_OP) {
+    LOG_WARN("unsupported LIKE expression. %d", comp_);
+    return RC::INTERNAL;
+  }
+  if (right_->type() != ExprType::VALUE) {
+    LOG_WARN("right expression of LIKE must be a char constant");
+    return RC::INVALID_ARGUMENT;
+  }
+  Value left_value;
+  Value right_value;
+  rc = left_->get_value(tuple, left_value);
+  if (rc != RC::SUCCESS) {
+    LOG_WARN("failed to get value of left expression. rc=%s", strrc(rc));
+    return rc;
+  }
+  if (left_value.attr_type() != AttrType::CHARS) {
+    LOG_ERROR("value type %s doesn't support 'like'", attr_type_to_string(left_value.attr_type()));
+    return RC::UNIMPLEMENTED;
+  }
+  rc = right_->get_value(tuple, right_value);
+  if (rc != RC::SUCCESS) {
+    LOG_WARN("failed to get value of right expression. rc=%s", strrc(rc));
+    return rc;
+  }
+  if (right_value.attr_type() != AttrType::CHARS) {
+    LOG_ERROR("value type %s doesn't support 'like'", attr_type_to_string(right_value.attr_type()));
+    return RC::UNIMPLEMENTED;
+  }
+  const string &left_str  = left_value.get_string();
+  const string &right_str = right_value.get_string();
+  bool          is_like   = (comp() == CompOp::LIKE_OP);
+  if (string_like(left_str.c_str(), right_str.c_str())) {
+    value.set_boolean(is_like);
+  } else {
+    value.set_boolean(!is_like);
+  }
+  return RC::SUCCESS;
+}

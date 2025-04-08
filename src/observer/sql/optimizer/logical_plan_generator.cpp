@@ -163,6 +163,10 @@ RC LogicalPlanGenerator::create_plan(FilterStmt *filter_stmt, unique_ptr<Logical
         cmp_expr = unique_ptr<IsExpr>(static_cast<IsExpr *>(expr.release()));
         break;
       }
+      case ExprType::LIKE: {
+        cmp_expr = unique_ptr<LikeExpr>(static_cast<LikeExpr *>(expr.release()));
+        break;
+      }
       default:
         LOG_WARN("unsupported condition expression type: %d", static_cast<int>(expr->type()));
         return RC::INVALID_ARGUMENT;

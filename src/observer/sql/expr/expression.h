@@ -47,6 +47,7 @@ enum class ExprType
   ARITHMETIC,   ///< 算术运算
   AGGREGATION,  ///< 聚合运算
   IS,           ///< 判断是否为NULL or Bool
+  LIKE,         //< 判断是否LIKE某个Pattern
 };
 
 /**
@@ -502,6 +503,32 @@ public:
 
 private:
   CompOp                      comp_;  // 只允许 IS or IS_NOT
+  std::unique_ptr<Expression> left_;
+  std::unique_ptr<Expression> right_;
+};
+
+/**
+ * @brief LIKE 表达式
+ * @ingroup Expression
+ * LIKE 表达式，用于判断是否为某个模式，因此右边的表达式必须是一个常量，
+ */
+class LikeExpr : public Expression
+{
+public:
+  LikeExpr(CompOp comp_op, std::unique_ptr<Expression> left, std::unique_ptr<Expression> right);
+  virtual ~LikeExpr() = default;
+
+  ExprType type() const override { return ExprType::LIKE; }
+  int      value_length() const override { return sizeof(bool); }
+  RC       get_value(const Tuple &tuple, Value &value) const override;
+  AttrType value_type() const override { return AttrType::BOOLEANS; }
+  CompOp   comp() const { return comp_; }
+
+  unique_ptr<Expression> &left() { return left_; }
+  unique_ptr<Expression> &right() { return right_; }
+
+private:
+  CompOp                      comp_;  // 只允许 LIKE or NOT_LIKE
   std::unique_ptr<Expression> left_;
   std::unique_ptr<Expression> right_;
 };
