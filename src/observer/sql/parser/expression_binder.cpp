@@ -153,10 +153,10 @@ RC ExpressionBinder::bind_unbound_field_expression(
   auto unbound_field_expr = static_cast<UnboundFieldExpr *>(expr.get());
 
   const char *table_name = unbound_field_expr->table_name();
+  LOG_DEBUG("unbound field expression's table name: %s", table_name);
   const char *field_name = unbound_field_expr->field_name();
-  const char *alias      = unbound_field_expr->alias().c_str();
-
-  Table *table = nullptr;
+  const char *alias      = unbound_field_expr->alias().empty() ? nullptr : unbound_field_expr->alias().c_str();
+  Table      *table      = nullptr;
   if (is_blank(table_name)) {
     if (context_.query_tables().size() != 1) {
       LOG_INFO("cannot determine table for field: %s", field_name);
@@ -172,7 +172,6 @@ RC ExpressionBinder::bind_unbound_field_expression(
     }
     if (context_.query_tables().size() == 1) {
       // 如果只有一个表，表名被省略
-      // 源代码确定是对这个对象吗
       table_name = nullptr;
     }
   }
@@ -188,7 +187,8 @@ RC ExpressionBinder::bind_unbound_field_expression(
 
     Field      field(table, field_meta);
     FieldExpr *field_expr = new FieldExpr(field, table_name);
-    field_expr->set_alias(alias);
+    string     alias_str  = alias == nullptr ? "" : alias;
+    field_expr->set_alias(alias_str);
     field_expr->set_name(field_name);
     field_expr->set_table_alias(unbound_field_expr->table_alias());
     bound_expressions.emplace_back(field_expr);

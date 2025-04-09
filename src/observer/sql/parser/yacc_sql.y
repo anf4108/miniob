@@ -739,22 +739,13 @@ rel_attr:
     ;
 
 relation:
-    ID {
-      $$ = new RelationSqlNode;
-      $$->relation_name = $1;
-      context->add_object($$);
-    }
-    | ID AS ID {
+    ID alias {
       $$ = new RelationSqlNode;
       context->add_object($$);
       $$->relation_name = $1;
-      $$->alias_name = $3;
-    }
-    |ID ID {
-      $$ = new RelationSqlNode;
-      context->add_object($$);
-      $$->relation_name = $1;
-      $$->alias_name = $2;
+      if ($2 != nullptr) {
+        $$->alias_name = $2;
+      }
     }
     ;
 rel_list:
