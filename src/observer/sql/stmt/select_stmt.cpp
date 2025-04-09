@@ -118,6 +118,7 @@ RC SelectStmt::create(Db *db, SelectSqlNode &select_sql, Stmt *&stmt,
   vector<Table *>                tables;
   unordered_map<string, Table *> table_map;
   std::vector<std::string>       table_aliases;
+
   for (size_t i = 0; i < select_sql.relations.size(); i++) {
     const char *table_name = select_sql.relations[i].relation_name.c_str();
     if (nullptr == table_name) {
@@ -148,7 +149,7 @@ RC SelectStmt::create(Db *db, SelectSqlNode &select_sql, Stmt *&stmt,
 
     if (!select_sql.relations[i].alias_name.empty()) {
       // 如果有别名，使用别名
-      (*alias2name)[select_sql.relations[i].alias_name] = table_name;
+      (*alias2name)[select_sql.relations[i].alias_name] = string(table_name);
       (*name2alias)[table_name]                         = select_sql.relations[i].alias_name;
     }
   }

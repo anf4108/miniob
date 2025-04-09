@@ -38,8 +38,12 @@ public:
   friend class VectorType;
   // add date type
   friend class DateType;
-  Value() = default;
-
+  // Value() = default;
+  Value()
+  {
+    attr_type_ = AttrType::UNDEFINED;
+    length_    = 0;
+  }
   ~Value() { reset(); }
 
   Value(AttrType attr_type, char *data, int length = 4) : attr_type_(attr_type) { this->set_data(data, length); }

@@ -118,6 +118,7 @@ public:
    * @details 在SQL语句中，用户可以给表达式起一个别名
    */
   virtual string alias() const { return alias_; }
+  const char    *alias_c_str() const { return alias_.c_str(); }
   virtual void   set_alias(string alias) { alias_ = alias; }
 
   virtual string table_alias() const { return table_alias_; }
@@ -169,8 +170,7 @@ private:
 class UnboundFieldExpr : public Expression
 {
 public:
-  UnboundFieldExpr(const string &table_name, const string &field_name)
-      : table_name_(table_name), field_name_(field_name)
+  UnboundFieldExpr(const string table_name, const string field_name) : table_name_(table_name), field_name_(field_name)
   {}
 
   virtual ~UnboundFieldExpr() = default;

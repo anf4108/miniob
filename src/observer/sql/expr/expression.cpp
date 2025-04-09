@@ -649,9 +649,12 @@ RC SysFunctionExpr::check_params_type_and_number() const
     }
     case SysFuncType::ROUND: {
       /// TODO: check the type of params
-      if (params_.size() != 2 && params_[0]->value_type() != AttrType::FLOATS &&
-          params_[1]->value_type() != AttrType::INTS) {
-        LOG_WARN("ROUND function must have two parameters, the first is float and the second is int");
+      if ((params_.size() == 1 || params_.size() != 2) && params_[0]->value_type() != AttrType::FLOATS) {
+        LOG_WARN("ROUND function must have one or two parameters, the first is float and the second is int");
+        return RC::INVALID_ARGUMENT;
+      }
+      if (params_.size() == 2 && params_[1]->value_type() != AttrType::INTS) {
+        LOG_WARN("ROUND function's second parameter must be int");
         return RC::INVALID_ARGUMENT;
       }
       break;
@@ -684,25 +687,39 @@ RC SysFunctionExpr::get_func_length_value(const Tuple &tuple, Value &value) cons
 
 RC SysFunctionExpr::get_func_round_value(const Tuple &tuple, Value &value) const
 {
-  RC    rc = RC::SUCCESS;
-  Value param1;
-  Value param2;
-  rc = params_[0]->get_value(tuple, param1);
-  if (rc != RC::SUCCESS) {
-    LOG_WARN("failed to get value of first parameter. rc=%s", strrc(rc));
-    return rc;
+  RC rc = RC::SUCCESS;
+  if (params_.size() > 1) {
+    Value param1;
+    Value param2;
+    rc = params_[0]->get_value(tuple, param1);
+    if (rc != RC::SUCCESS) {
+      LOG_WARN("failed to get value of first parameter. rc=%s", strrc(rc));
+      return rc;
+    }
+    rc = params_[1]->get_value(tuple, param2);
+    if (rc != RC::SUCCESS) {
+      LOG_WARN("failed to get value of second parameter. rc=%s", strrc(rc));
+      return rc;
+    }
+    float        value1 = param1.get_float();
+    int          value2 = param2.get_int();
+    stringstream ss;
+    ss << fixed << setprecision(value2) << value1;
+    ss >> value1;
+    value.set_float(value1);
+  } else {
+    Value param1;
+    rc = params_[0]->get_value(tuple, param1);
+    if (rc != RC::SUCCESS) {
+      LOG_WARN("failed to get value of first parameter. rc=%s", strrc(rc));
+      return rc;
+    }
+    float        value1 = param1.get_float();
+    stringstream ss;
+    ss << fixed << setprecision(0) << value1;
+    ss >> value1;
+    value.set_float(value1);
   }
-  rc = params_[1]->get_value(tuple, param2);
-  if (rc != RC::SUCCESS) {
-    LOG_WARN("failed to get value of second parameter. rc=%s", strrc(rc));
-    return rc;
-  }
-  float        value1 = param1.get_float();
-  int          value2 = param2.get_int();
-  stringstream ss;
-  ss << fixed << setprecision(value2) << value1;
-  ss >> value1;
-  value.set_float(value1);
   return rc;
 }
 
@@ -755,25 +772,39 @@ RC SysFunctionExpr::try_get_func_length_value(Value &value) const
 
 RC SysFunctionExpr::try_get_func_round_value(Value &value) const
 {
-  RC    rc = RC::SUCCESS;
-  Value param1;
-  Value param2;
-  rc = params_[0]->try_get_value(param1);
-  if (rc != RC::SUCCESS) {
-    LOG_WARN("failed to get value of first parameter. rc=%s", strrc(rc));
-    return rc;
+  RC rc = RC::SUCCESS;
+  if (params_.size() > 1) {
+    Value param1;
+    Value param2;
+    rc = params_[0]->try_get_value(param1);
+    if (rc != RC::SUCCESS) {
+      LOG_WARN("failed to get value of first parameter. rc=%s", strrc(rc));
+      return rc;
+    }
+    rc = params_[1]->try_get_value(param2);
+    if (rc != RC::SUCCESS) {
+      LOG_WARN("failed to get value of second parameter. rc=%s", strrc(rc));
+      return rc;
+    }
+    float        value1 = param1.get_float();
+    int          value2 = param2.get_int();
+    stringstream ss;
+    ss << fixed << setprecision(value2) << value1;
+    ss >> value1;
+    value.set_float(value1);
+  } else {
+    Value param1;
+    rc = params_[0]->try_get_value(param1);
+    if (rc != RC::SUCCESS) {
+      LOG_WARN("failed to get value of first parameter. rc=%s", strrc(rc));
+      return rc;
+    }
+    float        value1 = param1.get_float();
+    stringstream ss;
+    ss << fixed << setprecision(0) << value1;
+    ss >> value1;
+    value.set_float(value1);
   }
-  rc = params_[1]->try_get_value(param2);
-  if (rc != RC::SUCCESS) {
-    LOG_WARN("failed to get value of second parameter. rc=%s", strrc(rc));
-    return rc;
-  }
-  float        value1 = param1.get_float();
-  int          value2 = param2.get_int();
-  stringstream ss;
-  ss << fixed << setprecision(value2) << value1;
-  ss >> value1;
-  value.set_float(value1);
   return rc;
 }
 

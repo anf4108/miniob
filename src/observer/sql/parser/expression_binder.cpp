@@ -155,7 +155,7 @@ RC ExpressionBinder::bind_unbound_field_expression(
   const char *table_name = unbound_field_expr->table_name();
   LOG_DEBUG("unbound field expression's table name: %s", table_name);
   const char *field_name = unbound_field_expr->field_name();
-  const char *alias      = unbound_field_expr->alias().empty() ? nullptr : unbound_field_expr->alias().c_str();
+  const char *alias      = unbound_field_expr->alias_c_str();
   Table      *table      = nullptr;
   if (is_blank(table_name)) {
     if (context_.query_tables().size() != 1) {
@@ -187,8 +187,7 @@ RC ExpressionBinder::bind_unbound_field_expression(
 
     Field      field(table, field_meta);
     FieldExpr *field_expr = new FieldExpr(field, table_name);
-    string     alias_str  = alias == nullptr ? "" : alias;
-    field_expr->set_alias(alias_str);
+    field_expr->set_alias(alias);
     field_expr->set_name(field_name);
     field_expr->set_table_alias(unbound_field_expr->table_alias());
     bound_expressions.emplace_back(field_expr);

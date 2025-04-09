@@ -728,6 +728,7 @@ rel_attr:
     ID {
       $$ = new RelAttrSqlNode;
       context->add_object($$);
+      $$->relation_name = string("");
       $$->attribute_name = $1;
     }
     | ID DOT ID {
@@ -753,7 +754,7 @@ rel_list:
       // $$ = new vector<string>();
       // $$->push_back($1);
       $$ = new vector<RelationSqlNode>;
-      $$->emplace_back(std::move(*$1));
+      $$->emplace_back(*$1);
       context->add_object($$);
       context->remove_object($1);
       delete $1;
@@ -766,7 +767,7 @@ rel_list:
         $$ = new vector<RelationSqlNode>;
         context->add_object($$);
       }
-      $$->insert($$->begin(), std::move(*$1));
+      $$->insert($$->begin(), *$1);
       // $$->insert($$->begin(), $1);
       context->remove_object($1);
       delete $1;
