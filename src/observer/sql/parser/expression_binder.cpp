@@ -154,6 +154,7 @@ RC ExpressionBinder::bind_unbound_field_expression(
 
   const char *table_name = unbound_field_expr->table_name();
   const char *field_name = unbound_field_expr->field_name();
+  const char *alias      = unbound_field_expr->alias().c_str();
 
   Table *table = nullptr;
   if (is_blank(table_name)) {
@@ -171,6 +172,7 @@ RC ExpressionBinder::bind_unbound_field_expression(
     }
     if (context_.query_tables().size() == 1) {
       // 如果只有一个表，表名被省略
+      // 源代码确定是对这个对象吗
       table_name = nullptr;
     }
   }
@@ -186,7 +188,9 @@ RC ExpressionBinder::bind_unbound_field_expression(
 
     Field      field(table, field_meta);
     FieldExpr *field_expr = new FieldExpr(field, table_name);
+    field_expr->set_alias(alias);
     field_expr->set_name(field_name);
+    field_expr->set_table_alias(unbound_field_expr->table_alias());
     bound_expressions.emplace_back(field_expr);
   }
 
@@ -473,6 +477,7 @@ RC ExpressionBinder::bind_aggregate_expression(
 
   auto aggregate_expr = make_unique<AggregateExpr>(aggregate_type, std::move(child_expr));
   aggregate_expr->set_name(unbound_aggregate_expr->name());
+  aggregate_expr->set_alias(unbound_aggregate_expr->alias());
   rc = check_aggregate_expression(*aggregate_expr);
   if (OB_FAIL(rc)) {
     return rc;
@@ -516,7 +521,7 @@ RC ExpressionBinder::bind_sys_function_expression(
   // Params 是否内存泄漏???
   auto sys_function = make_unique<SysFunctionExpr>(unbound_sys_function_expr->sys_func_type(), params);
   sys_function->set_name(unbound_sys_function_expr->name());
-
+  sys_function->set_alias(unbound_sys_function_expr->alias());
   // check sys function's params type and number
   rc = sys_function->check_params_type_and_number();
   if (OB_FAIL(rc)) {

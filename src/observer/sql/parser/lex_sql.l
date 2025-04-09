@@ -113,6 +113,7 @@ CHAR                                    RETURN_TOKEN(STRING_T);
 FLOAT                                   RETURN_TOKEN(FLOAT_T);
 DATE                                    RETURN_TOKEN(DATE_T);
 VECTOR                                  RETURN_TOKEN(VECTOR_T);
+AS                                      RETURN_TOKEN(AS);
 NOT                                     RETURN_TOKEN(NOT);
 IS                                      RETURN_TOKEN(IS_TOKEN);
 LIKE                                    RETURN_TOKEN(LIKE);

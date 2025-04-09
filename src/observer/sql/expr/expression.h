@@ -114,6 +114,15 @@ public:
   virtual void        set_name(string name) { name_ = name; }
 
   /**
+   * @brief 表达式的别名
+   * @details 在SQL语句中，用户可以给表达式起一个别名
+   */
+  virtual string alias() const { return alias_; }
+  virtual void   set_alias(string alias) { alias_ = alias; }
+
+  virtual string table_alias() const { return table_alias_; }
+  virtual void   set_table_alias(string table_alias) { table_alias_ = table_alias; }
+  /**
    * @brief 表达式在下层算子返回的 chunk 中的位置
    */
   virtual int  pos() const { return pos_; }
@@ -135,6 +144,8 @@ protected:
 
 private:
   string name_;
+  string alias_;        ///< 别名
+  string table_alias_;  ///< 表别名
 };
 
 class StarExpr : public Expression
@@ -171,6 +182,9 @@ public:
 
   const char *table_name() const { return table_name_.c_str(); }
   const char *field_name() const { return field_name_.c_str(); }
+
+  void set_field_name(const std::string &field_name) { field_name_ = field_name; }
+  void set_table_name(const std::string &table_name) { table_name_ = table_name; }
 
 private:
   string table_name_;

@@ -31,20 +31,95 @@ SelectStmt::~SelectStmt()
   }
 }
 
-RC SelectStmt::create(Db *db, SelectSqlNode &select_sql, Stmt *&stmt)
+RC SelectStmt::convert_alias_to_name(Expression *expr, std::shared_ptr<std::unordered_map<string, string>> alias2name)
+{
+  // 对表达式进行递归替换
+  if (expr->type() == ExprType::VALUE || expr->type() == ExprType::STAR) {
+    return RC::SUCCESS;
+  }
+  if (expr->type() == ExprType::ARITHMETIC) {
+    ArithmeticExpr *arith_expr = static_cast<ArithmeticExpr *>(expr);
+    if (arith_expr->left() != nullptr) {
+      RC rc = SelectStmt::convert_alias_to_name(arith_expr->left().get(), alias2name);
+      if (rc != RC::SUCCESS) {
+        LOG_WARN("failed to check parent relation");
+        return rc;
+      }
+    }
+    if (arith_expr->right() != nullptr) {
+      RC rc = SelectStmt::convert_alias_to_name(arith_expr->right().get(), alias2name);
+      if (rc != RC::SUCCESS) {
+        LOG_WARN("failed to check parent relation");
+        return rc;
+      }
+    }
+    return RC::SUCCESS;
+  } else if (expr->type() == ExprType::UNBOUND_AGGREGATION) {
+    UnboundAggregateExpr *aggre_expr = static_cast<UnboundAggregateExpr *>(expr);
+    if (aggre_expr->child() == nullptr) {
+      LOG_WARN("invalid aggre expr");
+      return RC::INVALID_ARGUMENT;
+    }
+    RC rc = SelectStmt::convert_alias_to_name(aggre_expr->child().get(), alias2name);
+    if (rc != RC::SUCCESS) {
+      LOG_WARN("failed to check parent relation");
+      return rc;
+    }
+    return rc;
+  } else if (expr->type() == ExprType::SYS_FUNCTION) {
+    SysFunctionExpr *sys_func_expr = static_cast<SysFunctionExpr *>(expr);
+    if (sys_func_expr->params().size() == 0) {
+      LOG_WARN("invalid sys function expr");
+      return RC::INVALID_ARGUMENT;
+    }
+    for (auto &param : sys_func_expr->params()) {
+      RC rc = SelectStmt::convert_alias_to_name(param.get(), alias2name);
+      if (rc != RC::SUCCESS) {
+        LOG_WARN("failed to check parent relation");
+        return rc;
+      }
+    }
+    return RC::SUCCESS;
+  }
+  if (expr->type() != ExprType::UNBOUND_FIELD) {
+    LOG_WARN("convert_alias_to_name: invalid expr type: %d. It should be UnoundField.", expr->type());
+    return RC::INVALID_ARGUMENT;
+  }
+  auto ub_field_expr = static_cast<UnboundFieldExpr *>(expr);
+
+  // 替换 field 的表的别名为真实的表名
+  if (alias2name->find(ub_field_expr->table_name()) != alias2name->end()) {
+    // 如果在 alias2name 中找到了，说明是别名，需要替换为真实的表名
+    std::string true_table_name = (*alias2name)[ub_field_expr->table_name()];
+    LOG_DEBUG("convert alias to name: %s -> %s",ub_field_expr->table_name(), true_table_name.c_str());
+    // THE LOGIC IS SO IMPORTANT HERE
+    ub_field_expr->set_table_alias(ub_field_expr->table_name());
+    ub_field_expr->set_table_name(true_table_name);
+  }
+  return RC::SUCCESS;
+}
+
+RC SelectStmt::create(Db *db, SelectSqlNode &select_sql, Stmt *&stmt,
+    std::shared_ptr<std::unordered_map<string, string>> name2alias,
+    std::shared_ptr<std::unordered_map<string, string>> alias2name)
 {
   if (nullptr == db) {
     LOG_WARN("invalid argument. db is null");
     return RC::INVALID_ARGUMENT;
   }
 
+  if (name2alias == nullptr)
+    name2alias = std::make_shared<std::unordered_map<string, string>>();
+  if (alias2name == nullptr)
+    alias2name = std::make_shared<std::unordered_map<string, string>>();
   BinderContext binder_context;
 
   // collect tables in `from` statement
   vector<Table *>                tables;
   unordered_map<string, Table *> table_map;
+  std::vector<std::string>       table_aliases;
   for (size_t i = 0; i < select_sql.relations.size(); i++) {
-    const char *table_name = select_sql.relations[i].c_str();
+    const char *table_name = select_sql.relations[i].relation_name.c_str();
     if (nullptr == table_name) {
       LOG_WARN("invalid argument. relation name is null. index=%d", i);
       return RC::INVALID_ARGUMENT;
@@ -58,7 +133,61 @@ RC SelectStmt::create(Db *db, SelectSqlNode &select_sql, Stmt *&stmt)
 
     binder_context.add_table(table);
     tables.push_back(table);
+    // 当别名为空时也会加入“”
+    table_aliases.push_back(select_sql.relations[i].alias_name);
     table_map.insert({table_name, table});
+    // 检查 alias 重复
+    for (size_t j = i + 1; j < select_sql.relations.size(); j++) {
+      if (select_sql.relations[i].alias_name.empty() || select_sql.relations[j].alias_name.empty())
+        continue;
+      if (select_sql.relations[i].alias_name == select_sql.relations[j].alias_name) {
+        LOG_WARN("duplicate alias: %s", select_sql.relations[i].alias_name.c_str());
+        return RC::INVALID_ARGUMENT;
+      }
+    }
+
+    if (!select_sql.relations[i].alias_name.empty()) {
+      // 如果有别名，使用别名
+      (*alias2name)[select_sql.relations[i].alias_name] = table_name;
+      (*name2alias)[table_name]                         = select_sql.relations[i].alias_name;
+    }
+  }
+
+  // 处理 select 中的表达式(projection)中带有别名的字段替换为真实表名,列名不会替换
+  for (auto &expression : select_sql.expressions) {
+    RC rc = convert_alias_to_name(expression.get(), alias2name);
+    LOG_DEBUG("convert alias from %s to %s", expression->name(), expression->alias().c_str());
+    if (rc != RC::SUCCESS) {
+      LOG_WARN("failed to convert alias to name");
+      return rc;
+    }
+
+    // 如果是 StarExpr，检查是否有别名，如果有报错
+    if (expression->type() == ExprType::STAR) {
+      StarExpr *star_expr = static_cast<StarExpr *>(expression.get());
+      if (!star_expr->alias().empty()) {
+        LOG_WARN("alias found in star expression");
+        return RC::INVALID_ARGUMENT;
+      }
+    }
+  }
+
+  // 将 conditions 中 **所有** 带有别名的表名替换为真实的表名
+  for (auto &condition : select_sql.conditions) {
+    if (condition.left_expr != nullptr) {
+      RC rc = convert_alias_to_name(condition.left_expr.get(), alias2name);
+      if (rc != RC::SUCCESS) {
+        LOG_WARN("failed to convert alias to name");
+        return rc;
+      }
+    }
+    if (condition.right_expr != nullptr) {
+      RC rc = convert_alias_to_name(condition.right_expr.get(), alias2name);
+      if (rc != RC::SUCCESS) {
+        LOG_WARN("failed to convert alias to name");
+        return rc;
+      }
+    }
   }
 
   // 绑定表达式，指的是将表达式中的字段和 table 关联起来
@@ -129,7 +258,6 @@ RC SelectStmt::create(Db *db, SelectSqlNode &select_sql, Stmt *&stmt)
   // create filter statement in `where` statement
   FilterStmt *filter_stmt = nullptr;
   RC          rc          = FilterStmt::create(db, default_table, &table_map, select_sql.conditions, filter_stmt);
-  // RC          rc = FilterStmt::create(db, default_table, &table_map, select_sql.conditions.data(), filter_stmt);
   if (rc != RC::SUCCESS) {
     LOG_WARN("cannot construct filter stmt");
     return rc;
@@ -139,6 +267,7 @@ RC SelectStmt::create(Db *db, SelectSqlNode &select_sql, Stmt *&stmt)
   SelectStmt *select_stmt = new SelectStmt();
 
   select_stmt->tables_.swap(tables);
+  select_stmt->table_aliases_.swap(table_aliases);
   select_stmt->query_expressions_.swap(bound_expressions);
   select_stmt->filter_stmt_ = filter_stmt;
   select_stmt->group_by_.swap(group_by_expressions);

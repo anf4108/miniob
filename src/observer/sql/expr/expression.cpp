@@ -22,7 +22,11 @@ using namespace std;
 
 RC FieldExpr::get_value(const Tuple &tuple, Value &value) const
 {
-  return tuple.find_cell(TupleCellSpec(table_name(), field_name()), value);
+  // change the table alias
+  auto spec = TupleCellSpec(table_name(), field_name());
+  if (!table_alias().empty())
+    spec.set_table_alias(table_alias());
+  return tuple.find_cell(spec, value);
 }
 
 bool FieldExpr::equal(const Expression &other) const

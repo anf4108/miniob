@@ -121,6 +121,7 @@ UnboundAggregateExpr *create_aggregate_expression(const char *aggregate_name,
         EXPLAIN
         STORAGE
         FORMAT
+        AS
         EQ
         LT
         GT
@@ -144,11 +145,12 @@ UnboundAggregateExpr *create_aggregate_expression(const char *aggregate_name,
   vector<AttrInfoSqlNode> *             attr_infos;
   AttrInfoSqlNode *                          attr_info;
   Expression *                               expression;
+  RelationSqlNode *                            relation;
   vector<unique_ptr<Expression>> * expression_list;
   vector<Value> *                       value_list;
   vector<ConditionSqlNode> *            condition_list;
   vector<RelAttrSqlNode> *              rel_attr_list;
-  vector<string> *                 relation_list;
+  vector<RelationSqlNode> *                 relation_list;
   char *                                     cstring;
   int                                        number;
   float                                      floats;
@@ -168,7 +170,8 @@ UnboundAggregateExpr *create_aggregate_expression(const char *aggregate_name,
 %type <value>               value
 %type <number>              number
 %type <functype>            sys_func_type
-%type <cstring>             relation
+%type <relation>             relation
+%type <cstring>             alias
 %type <comp>                comp_op
 %type <rel_attr>            rel_attr
 %type <attr_infos>          attr_def_list
@@ -589,23 +592,31 @@ calc_stmt:
     ;
 
 expression_list:
-    expression
+    expression alias
     {
       $$ = new vector<unique_ptr<Expression>>;
       context->add_object($$);
+      if ($2 != nullptr) {
+        $1->set_alias($2);
+      }
       $$->emplace_back($1);
+      // free($2);
       context->remove_object($1);
     }
-    | expression COMMA expression_list
+    | expression alias COMMA expression_list
     {
-      if ($3 != nullptr) {
-        $$ = $3;
+      if ($4 != nullptr) {
+        $$ = $4;
       } else {
         $$ = new vector<unique_ptr<Expression>>;
         context->add_object($$);
       }
+      if ($2 != nullptr) {
+        $1->set_alias($2);
+      }
       // push to front
       $$->emplace($$->begin(), $1);
+      // free($2);
       context->remove_object($1);
     }
     ;
@@ -700,6 +711,19 @@ sys_func:
   }
   ;
 
+alias:
+    /* empty */
+    {
+      $$ = nullptr;
+    }
+    | AS ID {
+      $$ = $2;
+    }
+    | ID {
+      $$ = $1;
+    }
+    ;
+
 rel_attr:
     ID {
       $$ = new RelAttrSqlNode;
@@ -716,24 +740,45 @@ rel_attr:
 
 relation:
     ID {
-      $$ = $1;
+      $$ = new RelationSqlNode;
+      $$->relation_name = $1;
+      context->add_object($$);
+    }
+    | ID AS ID {
+      $$ = new RelationSqlNode;
+      context->add_object($$);
+      $$->relation_name = $1;
+      $$->alias_name = $3;
+    }
+    |ID ID {
+      $$ = new RelationSqlNode;
+      context->add_object($$);
+      $$->relation_name = $1;
+      $$->alias_name = $2;
     }
     ;
 rel_list:
     relation {
-      $$ = new vector<string>();
+      // $$ = new vector<string>();
+      // $$->push_back($1);
+      $$ = new vector<RelationSqlNode>;
+      $$->emplace_back(std::move(*$1));
       context->add_object($$);
-      $$->push_back($1);
+      context->remove_object($1);
+      delete $1;
     }
     | relation COMMA rel_list {
       if ($3 != nullptr) {
         $$ = $3;
       } else {
-        $$ = new vector<string>;
+        // $$ = new vector<string>;
+        $$ = new vector<RelationSqlNode>;
         context->add_object($$);
       }
-
-      $$->insert($$->begin(), $1);
+      $$->insert($$->begin(), std::move(*$1));
+      // $$->insert($$->begin(), $1);
+      context->remove_object($1);
+      delete $1;
     }
     ;
 
@@ -771,7 +816,8 @@ condition_list:
         context->add_object($$);
       }
       $1->conjunction_type = ConjunctionType::CONJ_AND;
-      $$->emplace_back(std::move(*$1));
+      $$->insert($$->begin(), std::move(*$1));
+      // $$->emplace_back(std::move(*$1));
       context->remove_object($1);
       delete $1;
     }
