@@ -50,6 +50,7 @@ RC PredicateRewriteRule::rewrite(unique_ptr<LogicalOperator> &oper, bool &change
       oper->add_child(std::move(grand_child_oper));
     }
   } else {
+    LOG_DEBUG("predicate is always false, remove it");
     child_opers.clear();
   }
 

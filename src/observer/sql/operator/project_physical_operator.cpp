@@ -41,8 +41,24 @@ RC ProjectPhysicalOperator::open(Trx *trx)
 
 RC ProjectPhysicalOperator::next()
 {
+  /// 由于我改了代码，导致之前的题目NULL过不了.....
+  /// 我的源思路是为了处理 select length('das') 这个case
+  /// 但是优化阶段会将NULL相关的题目后续算子清除
   if (no_child && !emitted_) {
-    emitted_ = true;
+    emitted_                = true;
+    const auto &expressions = tuple_.expressions();
+    for (const auto &expression : expressions) {
+      if (expression->type() == ExprType::FIELD) {
+        return RC::RECORD_EOF;
+      } else if (expression->type() == ExprType::SYS_FUNCTION) {
+        const auto &params = static_cast<SysFunctionExpr *>(expression.get())->params();
+        for (const auto &param : params) {
+          if (param->type() == ExprType::FIELD) {
+            return RC::RECORD_EOF;
+          }
+        }
+      }
+    }
     return RC::SUCCESS;
   }
   if (children_.empty()) {

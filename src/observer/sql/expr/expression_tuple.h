@@ -72,6 +72,8 @@ public:
     return rc;
   }
 
+  const vector<ExprPointerType> &expressions() const { return expressions_; }
+
 private:
   RC get_value(const ExprPointerType &expression, Value &value) const
   {

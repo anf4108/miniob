@@ -172,6 +172,7 @@ RC ComparisonExpr::try_get_value(Value &cell) const
 
     bool value = false;
     RC   rc    = compare_value(left_cell, right_cell, value);
+    LOG_DEBUG("Through try_get_value(value): left_value=%s, right_value=%s", left_cell.to_string(), right_cell.to_string());
     if (rc != RC::SUCCESS) {
       LOG_WARN("failed to compare tuple cells. rc=%s", strrc(rc));
     } else {
@@ -201,7 +202,8 @@ RC ComparisonExpr::get_value(const Tuple &tuple, Value &value) const
   }
 
   bool bool_value = false;
-
+  // LOG_DEBUG("Through get_value(tuple,value): left_value=%s, right_value=%s", left_value.to_string(),
+  // right_value.to_string());
   rc = compare_value(left_value, right_value, bool_value);
   if (rc == RC::SUCCESS) {
     value.set_boolean(bool_value);

@@ -292,6 +292,7 @@ string Value::to_string() const
 int Value::compare(const Value &other) const
 {
   if (this->is_null() || other.is_null()) {
+    LOG_DEBUG("DETECT NULL VALUE, RETURNING INT32_MAX");
     return INT32_MAX;  // 表示false比较 , unknown result
   }
   return DataType::type_instance(this->attr_type_)->compare(*this, other);
