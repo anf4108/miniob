@@ -162,6 +162,7 @@ public:
   RC get_value(const Tuple &tuple, Value &value) const override { return RC::UNIMPLEMENTED; }  // 不需要实现
 
   const char *table_name() const { return table_name_.c_str(); }
+  void        set_table_name(const char *table_name) { table_name_ = table_name; }
 
 private:
   string table_name_;

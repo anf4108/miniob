@@ -34,7 +34,7 @@ SelectStmt::~SelectStmt()
 RC SelectStmt::convert_alias_to_name(Expression *expr, std::shared_ptr<std::unordered_map<string, string>> alias2name)
 {
   // 对表达式进行递归替换
-  if (expr->type() == ExprType::VALUE || expr->type() == ExprType::STAR) {
+  if (expr->type() == ExprType::VALUE) {
     return RC::SUCCESS;
   }
   if (expr->type() == ExprType::ARITHMETIC) {
@@ -79,6 +79,19 @@ RC SelectStmt::convert_alias_to_name(Expression *expr, std::shared_ptr<std::unor
         return rc;
       }
     }
+    return RC::SUCCESS;
+  } else if (expr->type() == ExprType::STAR) {
+    const char *table_name = static_cast<StarExpr *>(expr)->table_name();
+    if (!is_blank(table_name) && 0 != strcmp(table_name, "*")) {
+      if (alias2name->find(table_name) != alias2name->end()) {
+        // 如果在 alias2name 中找到了，说明是别名，需要替换为真实的表名
+        std::string true_table_name = (*alias2name)[table_name];
+        LOG_DEBUG("convert alias to name: %s -> %s", table_name, true_table_name.c_str());
+        static_cast<StarExpr *>(expr)->set_table_name(true_table_name.c_str());
+        expr->set_table_alias(table_name);
+      }
+    }
+    // 如果没有表名，说明是 *，不需要替换
     return RC::SUCCESS;
   }
   if (expr->type() != ExprType::UNBOUND_FIELD) {

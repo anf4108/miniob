@@ -648,6 +648,12 @@ expression:
       context->remove_object($1);
       delete $1;
     }
+    // 添加table.*功能,作为StarExpr
+    | ID DOT '*' {
+      $$ = new StarExpr($1);
+      context->add_object($$);
+      $$->set_name(token_name(sql_string, &@$));
+    }
     | rel_attr {
       RelAttrSqlNode *node = $1;
       $$ = new UnboundFieldExpr(node->relation_name, node->attribute_name);
@@ -780,11 +786,7 @@ where:
       $$ = nullptr;
     }
     | WHERE condition_list {
-      $$ = $2;  
-      // debug here
-      // for (auto &condition : *$2) {
-      //   printf("DEBUG: condition: %s -- comp_op %d -- %s\n", condition.left_expr->name(), (int)condition.comp_op, condition.right_expr->name());
-      // }
+      $$ = $2;
     }
     ;
 condition_list:
@@ -906,6 +908,7 @@ int sql_parse(const char *s, ParsedSqlResult *sql_result) {
     scan_string(s, scanner);
     int result = yyparse(s, sql_result, scanner, &context);
     // context.clear();
+    // automatically clean string
     for (char *ptr : allocated_strings) {
         free(ptr);
     }
