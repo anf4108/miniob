@@ -648,15 +648,13 @@ expression:
       context->remove_object($1);
       delete $1;
     }
-    // 添加table.*功能,作为StarExpr
-    | ID DOT '*' {
-      $$ = new StarExpr($1);
-      context->add_object($$);
-      $$->set_name(token_name(sql_string, &@$));
-    }
     | rel_attr {
       RelAttrSqlNode *node = $1;
-      $$ = new UnboundFieldExpr(node->relation_name, node->attribute_name);
+      if (node->attribute_name == "*" && node->relation_name != "") {
+        $$ = new StarExpr(node->relation_name.c_str());
+      } else {
+        $$ = new UnboundFieldExpr(node->relation_name, node->attribute_name);
+      }
       context->add_object($$);
       $$->set_name(token_name(sql_string, &@$));
       context->remove_object($1);
@@ -742,6 +740,13 @@ rel_attr:
       context->add_object($$);
       $$->relation_name  = $1;
       $$->attribute_name = $3;
+    }
+    // 添加table.*功能,作为StarExpr
+    | ID DOT '*' {
+      $$ = new RelAttrSqlNode;
+      context->add_object($$);
+      $$->relation_name  = $1;
+      $$->attribute_name = "*";
     }
     ;
 
