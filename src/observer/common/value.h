@@ -38,8 +38,12 @@ public:
   friend class VectorType;
   // add date type
   friend class DateType;
-  Value() = default;
-
+  // Value() = default;
+  Value()
+  {
+    attr_type_ = AttrType::UNDEFINED;
+    length_    = 0;
+  }
   ~Value() { reset(); }
 
   Value(AttrType attr_type, char *data, int length = 4) : attr_type_(attr_type) { this->set_data(data, length); }
@@ -141,12 +145,12 @@ public:
   string get_string() const;
   bool   get_boolean() const;
 
+  void set_int(int val);
+  void set_float(float val);
   bool is_null() const { return attr_type_ == AttrType::NULLS; }
   bool is_valid_date() const;
 
 private:
-  void set_int(int val);
-  void set_float(float val);
   void set_string(const char *s, int len = 0);
   void set_string_from_other(const Value &other);
   void set_date(const char *date_str);

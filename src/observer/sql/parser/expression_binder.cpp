@@ -62,6 +62,10 @@ RC ExpressionBinder::bind_expression(unique_ptr<Expression> &expr, vector<unique
       return bind_aggregate_expression(expr, bound_expressions);
     } break;
 
+    case ExprType::SYS_FUNCTION: {
+      return bind_sys_function_expression(expr, bound_expressions);
+    } break;
+
     case ExprType::FIELD: {
       return bind_field_expression(expr, bound_expressions);
     } break;
@@ -149,9 +153,10 @@ RC ExpressionBinder::bind_unbound_field_expression(
   auto unbound_field_expr = static_cast<UnboundFieldExpr *>(expr.get());
 
   const char *table_name = unbound_field_expr->table_name();
+  LOG_DEBUG("unbound field expression's table name: %s", table_name);
   const char *field_name = unbound_field_expr->field_name();
-
-  Table *table = nullptr;
+  const char *alias      = unbound_field_expr->alias_c_str();
+  Table      *table      = nullptr;
   if (is_blank(table_name)) {
     if (context_.query_tables().size() != 1) {
       LOG_INFO("cannot determine table for field: %s", field_name);
@@ -182,7 +187,9 @@ RC ExpressionBinder::bind_unbound_field_expression(
 
     Field      field(table, field_meta);
     FieldExpr *field_expr = new FieldExpr(field, table_name);
+    field_expr->set_alias(alias);
     field_expr->set_name(field_name);
+    field_expr->set_table_alias(unbound_field_expr->table_alias());
     bound_expressions.emplace_back(field_expr);
   }
 
@@ -469,12 +476,58 @@ RC ExpressionBinder::bind_aggregate_expression(
 
   auto aggregate_expr = make_unique<AggregateExpr>(aggregate_type, std::move(child_expr));
   aggregate_expr->set_name(unbound_aggregate_expr->name());
+  aggregate_expr->set_alias(unbound_aggregate_expr->alias());
   rc = check_aggregate_expression(*aggregate_expr);
   if (OB_FAIL(rc)) {
     return rc;
   }
 
   bound_expressions.emplace_back(std::move(aggregate_expr));
+  return RC::SUCCESS;
+}
+
+RC ExpressionBinder::bind_sys_function_expression(
+    unique_ptr<Expression> &expr, vector<unique_ptr<Expression>> &bound_expressions)
+{
+  // check sys function's params type and number
+  if (nullptr == expr) {
+    return RC::SUCCESS;
+  }
+  auto unbound_sys_function_expr = static_cast<SysFunctionExpr *>(expr.get());
+  RC   rc                        = RC::SUCCESS;
+
+  // bind sys function's params
+  vector<unique_ptr<Expression>>  child_bound_expressions;
+  vector<unique_ptr<Expression>> &params = unbound_sys_function_expr->params();
+  for (unique_ptr<Expression> &param : params) {
+    child_bound_expressions.clear();
+    rc = bind_expression(param, child_bound_expressions);
+    if (OB_FAIL(rc)) {
+      LOG_WARN("bind sys function's param failed. rc=%s", strrc(rc));
+      return rc;
+    }
+
+    if (child_bound_expressions.size() != 1) {
+      LOG_WARN("invalid children number of sys function expression: %d", child_bound_expressions.size());
+      return RC::INVALID_ARGUMENT;
+    }
+
+    if (child_bound_expressions[0].get() != param.get()) {
+      param.reset(child_bound_expressions[0].release());
+    }
+  }
+  // create sys function expression
+  // Params 是否内存泄漏???
+  auto sys_function = make_unique<SysFunctionExpr>(unbound_sys_function_expr->sys_func_type(), params);
+  sys_function->set_name(unbound_sys_function_expr->name());
+  sys_function->set_alias(unbound_sys_function_expr->alias());
+  // check sys function's params type and number
+  rc = sys_function->check_params_type_and_number();
+  if (OB_FAIL(rc)) {
+    LOG_WARN("check sys function's params type and number failed. rc=%s", strrc(rc));
+    return rc;
+  }
+  bound_expressions.emplace_back(std::move(sys_function));
   return RC::SUCCESS;
 }
 

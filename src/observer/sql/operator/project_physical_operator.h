@@ -43,4 +43,6 @@ public:
 private:
   vector<unique_ptr<Expression>>          expressions_;
   ExpressionTuple<unique_ptr<Expression>> tuple_;
+  bool                                    no_child = false;
+  bool                                    emitted_ = false;
 };

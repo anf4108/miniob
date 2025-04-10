@@ -88,6 +88,12 @@ enum ConjunctionType
   NO_CONJUNCTION
 };
 
+enum SysFuncType
+{
+  LENGTH,
+  ROUND,
+  DATE_FORMAT
+};
 /**
  * @brief 表示一个条件比较
  * @ingroup SQLParser
@@ -104,6 +110,17 @@ struct ConditionSqlNode
 };
 
 /**
+ * @brief 描述一个relation
+ * @ingroup SQLParser
+ * @details relation就是表的意思，relation name是表名，alias name是表的别名。
+ */
+struct RelationSqlNode
+{
+  string relation_name;  ///< Relation name
+  string alias_name;     ///< Alias name
+};
+
+/**
  * @brief 描述一个select语句
  * @ingroup SQLParser
  * @details 一个正常的select语句描述起来比这个要复杂很多，这里做了简化。
@@ -117,7 +134,7 @@ struct ConditionSqlNode
 struct SelectSqlNode
 {
   vector<unique_ptr<Expression>> expressions;  ///< 查询的表达式
-  vector<string>                 relations;    ///< 查询的表
+  vector<RelationSqlNode>        relations;    ///< 查询的表
   vector<ConditionSqlNode>       conditions;   ///< 查询条件，使用AND、OR等conjunction串联起来多个条件
   vector<unique_ptr<Expression>> group_by;     ///< group by clause
 };

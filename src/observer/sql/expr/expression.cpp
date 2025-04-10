@@ -15,12 +15,18 @@ See the Mulan PSL v2 for more details. */
 #include "sql/expr/expression.h"
 #include "sql/expr/tuple.h"
 #include "sql/expr/arithmetic_operator.hpp"
+#include "common/lang/iomanip.h"
+#include "common/lang/sstream.h"
 
 using namespace std;
 
 RC FieldExpr::get_value(const Tuple &tuple, Value &value) const
 {
-  return tuple.find_cell(TupleCellSpec(table_name(), field_name()), value);
+  // change the table alias
+  auto spec = TupleCellSpec(table_name(), field_name());
+  if (!table_alias().empty())
+    spec.set_table_alias(table_alias());
+  return tuple.find_cell(spec, value);
 }
 
 bool FieldExpr::equal(const Expression &other) const
@@ -166,6 +172,7 @@ RC ComparisonExpr::try_get_value(Value &cell) const
 
     bool value = false;
     RC   rc    = compare_value(left_cell, right_cell, value);
+    LOG_DEBUG("Through try_get_value(value): left_value=%s, right_value=%s", left_cell.to_string(), right_cell.to_string());
     if (rc != RC::SUCCESS) {
       LOG_WARN("failed to compare tuple cells. rc=%s", strrc(rc));
     } else {
@@ -195,7 +202,8 @@ RC ComparisonExpr::get_value(const Tuple &tuple, Value &value) const
   }
 
   bool bool_value = false;
-
+  // LOG_DEBUG("Through get_value(tuple,value): left_value=%s, right_value=%s", left_value.to_string(),
+  // right_value.to_string());
   rc = compare_value(left_value, right_value, bool_value);
   if (rc == RC::SUCCESS) {
     value.set_boolean(bool_value);
@@ -611,6 +619,392 @@ RC AggregateExpr::type_from_string(const char *type_str, AggregateExpr::Type &ty
   return rc;
 }
 
+////////////////////////////////////////////////////////////////////////////////
+AttrType SysFunctionExpr::value_type() const
+{
+  switch (sys_func_type_) {
+    case SysFuncType::DATE_FORMAT: return AttrType::DATES;
+    case SysFuncType::LENGTH: return AttrType::CHARS;
+    case SysFuncType::ROUND: return AttrType::FLOATS;
+    default: return AttrType::UNDEFINED;
+  }
+  return AttrType::UNDEFINED;
+}
+
+RC SysFunctionExpr::check_params_type_and_number() const
+{
+  switch (sys_func_type_) {
+    case SysFuncType::DATE_FORMAT: {
+      if (params_.size() != 2 || params_[0]->value_type() != AttrType::DATES ||
+          params_[1]->value_type() != AttrType::CHARS) {
+        LOG_WARN("DATE_FORMAT function must have two parameters, the first is date and the second is chars");
+        return RC::INVALID_ARGUMENT;
+      }
+      /// TODO: check the type of params
+      break;
+    }
+    case SysFuncType::LENGTH: {
+      if (params_.size() != 1 && params_[0]->value_type() != this->value_type()) {
+        LOG_WARN("LENGTH function must have one parameter, which is chars type");
+        return RC::INVALID_ARGUMENT;
+      }
+      break;
+    }
+    case SysFuncType::ROUND: {
+      /// TODO: check the type of params
+      if ((params_.size() == 1 || params_.size() != 2) && params_[0]->value_type() != AttrType::FLOATS) {
+        LOG_WARN("ROUND function must have one or two parameters, the first is float and the second is int");
+        return RC::INVALID_ARGUMENT;
+      }
+      if (params_.size() == 2 && params_[1]->value_type() != AttrType::INTS) {
+        LOG_WARN("ROUND function's second parameter must be int");
+        return RC::INVALID_ARGUMENT;
+      }
+      break;
+    }
+    default: {
+      LOG_WARN("unsupported sys function type. %d", sys_func_type_);
+      return RC::UNIMPLEMENTED;
+    }
+  }
+  return RC::SUCCESS;
+}
+
+RC SysFunctionExpr::get_func_length_value(const Tuple &tuple, Value &value) const
+{
+  RC    rc = RC::SUCCESS;
+  Value param;
+  rc = params_[0]->get_value(tuple, param);
+  if (rc != RC::SUCCESS) {
+    LOG_WARN("failed to get value of first parameter. rc=%s", strrc(rc));
+    return rc;
+  }
+  if (param.attr_type() != AttrType::CHARS) {
+    LOG_WARN("LENGTH function's parameter must be CHAR");
+    return RC::INVALID_ARGUMENT;
+  }
+  int len = strlen(param.get_string().c_str());
+  value.set_int(len);
+  return rc;
+}
+
+RC SysFunctionExpr::get_func_round_value(const Tuple &tuple, Value &value) const
+{
+  RC rc = RC::SUCCESS;
+  if (params_.size() > 1) {
+    Value param1;
+    Value param2;
+    rc = params_[0]->get_value(tuple, param1);
+    if (rc != RC::SUCCESS) {
+      LOG_WARN("failed to get value of first parameter. rc=%s", strrc(rc));
+      return rc;
+    }
+    rc = params_[1]->get_value(tuple, param2);
+    if (rc != RC::SUCCESS) {
+      LOG_WARN("failed to get value of second parameter. rc=%s", strrc(rc));
+      return rc;
+    }
+    float        value1 = param1.get_float();
+    int          value2 = param2.get_int();
+    stringstream ss;
+    ss << fixed << setprecision(value2) << value1;
+    ss >> value1;
+    value.set_float(value1);
+  } else {
+    Value param1;
+    rc = params_[0]->get_value(tuple, param1);
+    if (rc != RC::SUCCESS) {
+      LOG_WARN("failed to get value of first parameter. rc=%s", strrc(rc));
+      return rc;
+    }
+    float        value1 = param1.get_float();
+    stringstream ss;
+    ss << fixed << setprecision(0) << value1;
+    ss >> value1;
+    value.set_float(value1);
+  }
+  return rc;
+}
+
+RC SysFunctionExpr::get_func_date_format_value(const Tuple &tuple, Value &value) const
+{
+  RC rc = RC::SUCCESS;
+  /// input: select date_format('2001-02-04', '%y/%m/%d') as date_type;
+  /// ans:- 01/02/04
+  Value param1;
+  Value param2;
+  // 获取第一个参数（日期）
+
+  rc = params_[0]->get_value(tuple, param1);
+  if (rc != RC::SUCCESS) {
+    LOG_WARN("failed to get value of first parameter. rc=%s", strrc(rc));
+    return rc;
+  }
+  rc = params_[1]->get_value(tuple, param2);
+  if (rc != RC::SUCCESS) {
+    LOG_WARN("failed to get value of second parameter. rc=%s", strrc(rc));
+    return rc;
+  }
+
+  // 获取日期和格式字符串
+  int         date_val   = param1.get_int();
+  const char *format_str = param2.data();
+
+  // 分解日期
+  int year  = date_val / 10000;
+  int month = (date_val % 10000) / 100;
+  int day   = date_val % 100;
+
+  // 转换格式
+  std::string result;
+  for (size_t i = 0; format_str[i] != '\0'; ++i) {
+    if (format_str[i] == '%' && format_str[i + 1] != '\0') {
+      switch (format_str[++i]) {
+        case 'y': {  // 两位数的年份
+          result += std::to_string(year % 100 / 10) + std::to_string(year % 10);
+          break;
+        }
+        case 'Y': {  // 四位数的年份
+          result += std::to_string(year);
+          break;
+        }
+        case 'm': {  // 两位数的月份（01-12）
+          if (month < 10) {
+            result += "0";
+          }
+          result += std::to_string(month);
+          break;
+        }
+        case 'M': {  // 月份名称（January-December）
+          static const char *month_names[] = {"January",
+              "February",
+              "March",
+              "April",
+              "May",
+              "June",
+              "July",
+              "August",
+              "September",
+              "October",
+              "November",
+              "December"};
+          if (month >= 1 && month <= 12) {
+            result += month_names[month - 1];
+          } else {
+            return RC::INVALID_ARGUMENT;  // 无效的月份
+          }
+          break;
+        }
+        // 先不考虑valid...
+        case 'd': {  // 两位数的日期（01-31）
+          if (day < 10) {
+            result += "0";
+          }
+          result += std::to_string(day);
+          break;
+        }
+        case 'D': {  // 有英文后缀的日期（1st, 2nd, 3rd, ...）
+          result += std::to_string(day);
+          if (day >= 11 && day <= 13) {
+            result += "th";
+          } else {
+            switch (day % 10) {
+              case 1: result += "st"; break;
+              case 2: result += "nd"; break;
+              case 3: result += "rd"; break;
+              default: result += "th"; break;
+            }
+          }
+          break;
+        }
+        case '%': {  // 百分号字符
+          result += "%";
+          break;
+        }
+        default: {  // 不支持的格式说明符
+          result += std::string(1, format_str[i]);
+          break;
+        }
+      }
+    } else {
+      result += format_str[i];
+    }
+  }
+
+  // 设置返回值为格式化后的字符串
+  value.set_type(AttrType::CHARS);
+  value.set_data(result.c_str(), result.length());
+  return rc;
+}
+
+RC SysFunctionExpr::try_get_func_length_value(Value &value) const
+{
+  RC    rc = RC::SUCCESS;
+  Value param;
+  rc = params_[0]->try_get_value(param);
+  if (rc != RC::SUCCESS) {
+    LOG_WARN("failed to get value of first parameter. rc=%s", strrc(rc));
+    return rc;
+  }
+  if (param.attr_type() != AttrType::CHARS) {
+    LOG_WARN("LENGTH function's parameter must be CHAR");
+    return RC::INVALID_ARGUMENT;
+  }
+  int len = strlen(param.get_string().c_str());
+  value.set_int(len);
+  return rc;
+}
+
+RC SysFunctionExpr::try_get_func_round_value(Value &value) const
+{
+  RC rc = RC::SUCCESS;
+  if (params_.size() > 1) {
+    Value param1;
+    Value param2;
+    rc = params_[0]->try_get_value(param1);
+    if (rc != RC::SUCCESS) {
+      LOG_WARN("failed to get value of first parameter. rc=%s", strrc(rc));
+      return rc;
+    }
+    rc = params_[1]->try_get_value(param2);
+    if (rc != RC::SUCCESS) {
+      LOG_WARN("failed to get value of second parameter. rc=%s", strrc(rc));
+      return rc;
+    }
+    float        value1 = param1.get_float();
+    int          value2 = param2.get_int();
+    stringstream ss;
+    ss << fixed << setprecision(value2) << value1;
+    ss >> value1;
+    value.set_float(value1);
+  } else {
+    Value param1;
+    rc = params_[0]->try_get_value(param1);
+    if (rc != RC::SUCCESS) {
+      LOG_WARN("failed to get value of first parameter. rc=%s", strrc(rc));
+      return rc;
+    }
+    float        value1 = param1.get_float();
+    stringstream ss;
+    ss << fixed << setprecision(0) << value1;
+    ss >> value1;
+    value.set_float(value1);
+  }
+  return rc;
+}
+
+RC SysFunctionExpr::try_get_func_date_format_value(Value &value) const
+{
+  RC rc = RC::SUCCESS;
+  /// input: select date_format('2001-02-04', '%y/%m/%d') as date_type;
+  /// ans:- 01/02/04
+  Value param1;
+  Value param2;
+  // 获取第一个参数（日期）
+
+  rc = params_[0]->try_get_value(param1);
+  if (rc != RC::SUCCESS) {
+    LOG_WARN("failed to get value of first parameter. rc=%s", strrc(rc));
+    return rc;
+  }
+  rc = params_[1]->try_get_value(param2);
+  if (rc != RC::SUCCESS) {
+    LOG_WARN("failed to get value of second parameter. rc=%s", strrc(rc));
+    return rc;
+  }
+
+  // 获取日期和格式字符串
+  int         date_val   = param1.get_int();
+  const char *format_str = param2.data();
+
+  // 分解日期
+  int year  = date_val / 10000;
+  int month = (date_val % 10000) / 100;
+  int day   = date_val % 100;
+
+  // 转换格式
+  std::string result;
+  for (size_t i = 0; format_str[i] != '\0'; ++i) {
+    if (format_str[i] == '%' && format_str[i + 1] != '\0') {
+      switch (format_str[++i]) {
+        case 'y': {  // 两位数的年份
+          result += std::to_string(year % 100 / 10) + std::to_string(year % 10);
+          break;
+        }
+        case 'Y': {  // 四位数的年份
+          result += std::to_string(year);
+          break;
+        }
+        case 'm': {  // 两位数的月份（01-12）
+          if (month < 10) {
+            result += "0";
+          }
+          result += std::to_string(month);
+          break;
+        }
+        case 'M': {  // 月份名称（January-December）
+          static const char *month_names[] = {"January",
+              "February",
+              "March",
+              "April",
+              "May",
+              "June",
+              "July",
+              "August",
+              "September",
+              "October",
+              "November",
+              "December"};
+          if (month >= 1 && month <= 12) {
+            result += month_names[month - 1];
+          } else {
+            return RC::INVALID_ARGUMENT;  // 无效的月份
+          }
+          break;
+        }
+        // 先不考虑valid...
+        case 'd': {  // 两位数的日期（01-31）
+          if (day < 10) {
+            result += "0";
+          }
+          result += std::to_string(day);
+          break;
+        }
+        case 'D': {  // 有英文后缀的日期（1st, 2nd, 3rd, ...）
+          result += std::to_string(day);
+          if (day >= 11 && day <= 13) {
+            result += "th";
+          } else {
+            switch (day % 10) {
+              case 1: result += "st"; break;
+              case 2: result += "nd"; break;
+              case 3: result += "rd"; break;
+              default: result += "th"; break;
+            }
+          }
+          break;
+        }
+        case '%': {  // 百分号字符
+          result += "%";
+          break;
+        }
+        default: {  // 不支持的格式说明符
+          result += std::string(1, format_str[i]);
+          break;
+        }
+      }
+    } else {
+      result += format_str[i];
+    }
+  }
+
+  // 设置返回值为格式化后的字符串
+  value.set_type(AttrType::CHARS);
+  LOG_DEBUG("HERE IS ! result: %s", result.c_str());
+  value.set_data(result.c_str(), result.length());
+
+  return rc;
+}
 ////////////////////////////////////////////////////////////////////////////////
 IsExpr::IsExpr(CompOp comp_op, std::unique_ptr<Expression> left, std::unique_ptr<Expression> right)
     : comp_(comp_op), left_(std::move(left)), right_(std::move(right))

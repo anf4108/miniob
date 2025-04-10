@@ -37,6 +37,9 @@ RC TableScanPhysicalOperator::next()
     LOG_TRACE("got a record. rid=%s", current_record_.rid().to_string().c_str());
 
     tuple_.set_record(&current_record_);
+    tuple_.set_table_name(table_->name());
+    tuple_.table_alias_ = table_alias_;
+
     rc = filter(tuple_, filter_result);
     if (rc != RC::SUCCESS) {
       LOG_TRACE("record filtered failed=%s", strrc(rc));
