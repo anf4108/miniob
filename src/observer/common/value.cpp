@@ -319,7 +319,7 @@ int Value::get_int() const
     }
     case AttrType::DATES: {
       // 底层支持, 但接口不支持
-      LOG_TRACE("failed to convert date to number. s=%d", value_.int_value_);
+      return value_.int_value_;
       return 0;
     }
     default: {
@@ -351,7 +351,7 @@ float Value::get_float() const
       return float(value_.bool_value_);
     } break;
     case AttrType::DATES: {
-      LOG_TRACE("failed to convert date to float. s=%d", value_.int_value_);
+      return (float)(value_.int_value_);
       return 0.0;
     } break;
     default: {

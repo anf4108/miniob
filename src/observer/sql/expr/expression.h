@@ -608,6 +608,7 @@ public:
   RC try_get_value(Value &value) const override
   {
     RC rc = RC::SUCCESS;
+    LOG_DEBUG("try_get_value sys_func_type_ %d", sys_func_type_);
     switch (sys_func_type_) {
       case SysFuncType::LENGTH: {
         return try_get_func_length_value(value);
