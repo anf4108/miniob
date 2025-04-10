@@ -820,7 +820,7 @@ RC SysFunctionExpr::get_func_date_format_value(const Tuple &tuple, Value &value)
           break;
         }
         default: {  // 不支持的格式说明符
-          result += "%" + std::string(1, format_str[i]);
+          result += std::string(1, format_str[i]);
           break;
         }
       }
@@ -987,7 +987,7 @@ RC SysFunctionExpr::try_get_func_date_format_value(Value &value) const
           break;
         }
         default: {  // 不支持的格式说明符
-          result += "%" + std::string(1, format_str[i]);
+          result += std::string(1, format_str[i]);
           break;
         }
       }
