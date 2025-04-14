@@ -44,6 +44,7 @@ enum class PhysicalOperatorType
   PROJECT_VEC,
   CALC,
   STRING_LIST,
+  UPDATE,
   DELETE,
   INSERT,
   SCALAR_GROUP_BY,

@@ -340,6 +340,11 @@ RC Table::make_record(int value_num, const Value *values, Record &record)
   return RC::SUCCESS;
 }
 
+RC Table::make_record(char* data, int len, Record& record) {
+  record.set_data(data, len);
+  return RC::SUCCESS;
+}
+
 RC Table::set_value_to_record(char *record_data, const Value &value, const FieldMeta *field)
 {
   size_t       copy_len = field->len();
