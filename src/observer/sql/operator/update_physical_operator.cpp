@@ -119,7 +119,18 @@ RC UpdatePhysicalOperator::remove_all(const vector<RID> &rids) {
 RC UpdatePhysicalOperator::update(vector<char> v, RID &rid) {
   const auto *meta = update_field_.meta();
   int offset = meta->offset();
-  memcpy(v.data() + offset, value_.data(), meta->len());
+  int field_len = meta->len();
+  
+  // 检查边界
+  if (offset < 0 || offset + field_len > v.size()) {
+    LOG_ERROR("Invalid field offset or length. offset=%d, len=%d, record_size=%zu", 
+              offset, field_len, v.size());
+    return RC::INVALID_ARGUMENT;
+  }
+  
+  int len = min(field_len, value_.length());
+  
+  memcpy(v.data() + offset, value_.data(), len);
   return insert(v, rid);
 }
 
