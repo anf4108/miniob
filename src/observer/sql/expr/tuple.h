@@ -150,6 +150,12 @@ public:
     result = 0;
     return rc;
   }
+  void set_table_name(const std::string &table_name) { table_name_ = table_name; }
+
+  string table_alias_;
+
+protected:
+  string table_name_;
 };
 
 /**
@@ -232,6 +238,13 @@ public:
     const char *table_name = spec.table_name();
     const char *field_name = spec.field_name();
     if (0 != strcmp(table_name, table_->name())) {
+      return RC::NOTFOUND;
+    }
+
+    // 使得alias相同
+    auto spec_table_alias = spec.table_alias();
+    auto table_alias      = table_alias_;
+    if (!spec_table_alias.empty() && !table_alias.empty() && table_alias != spec_table_alias) {
       return RC::NOTFOUND;
     }
 

@@ -113,6 +113,7 @@ CHAR                                    RETURN_TOKEN(STRING_T);
 FLOAT                                   RETURN_TOKEN(FLOAT_T);
 DATE                                    RETURN_TOKEN(DATE_T);
 VECTOR                                  RETURN_TOKEN(VECTOR_T);
+AS                                      RETURN_TOKEN(AS);
 NOT                                     RETURN_TOKEN(NOT);
 IS                                      RETURN_TOKEN(IS_TOKEN);
 LIKE                                    RETURN_TOKEN(LIKE);
@@ -125,7 +126,9 @@ GROUP                                   RETURN_TOKEN(GROUP);
 BY                                      RETURN_TOKEN(BY);
 STORAGE                                 RETURN_TOKEN(STORAGE);
 FORMAT                                  RETURN_TOKEN(FORMAT);
-
+LENGTH                                  RETURN_TOKEN(SYS_LENGTH);
+ROUND                                   RETURN_TOKEN(SYS_ROUND);
+DATE_FORMAT                             RETURN_TOKEN(SYS_DATE_FORMAT);
 {ID}                                    yylval->cstring=strdup(yytext); static_cast<std::vector<char*>*>(yyextra)->push_back(yylval->cstring);LOG_DEBUG("%s", yytext); RETURN_TOKEN(ID); 
 "("                                     RETURN_TOKEN(LBRACE);
 ")"                                     RETURN_TOKEN(RBRACE);

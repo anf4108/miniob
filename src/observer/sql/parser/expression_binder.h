@@ -61,6 +61,8 @@ private:
       unique_ptr<Expression> &aggregate_expr, vector<unique_ptr<Expression>> &bound_expressions);
   RC bind_is_expression(unique_ptr<Expression> &is_expr, vector<unique_ptr<Expression>> &bound_expressions);
   RC bind_like_expression(unique_ptr<Expression> &like_expr, vector<unique_ptr<Expression>> &bound_expressions);
+  RC bind_sys_function_expression(
+      unique_ptr<Expression> &sys_function_expr, vector<unique_ptr<Expression>> &bound_expressions);
 
 private:
   BinderContext &context_;

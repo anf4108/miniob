@@ -26,9 +26,9 @@ ProjectPhysicalOperator::ProjectPhysicalOperator(vector<unique_ptr<Expression>> 
 RC ProjectPhysicalOperator::open(Trx *trx)
 {
   if (children_.empty()) {
+    no_child = true;
     return RC::SUCCESS;
   }
-
   PhysicalOperator *child = children_[0].get();
   RC                rc    = child->open(trx);
   if (rc != RC::SUCCESS) {
@@ -41,6 +41,26 @@ RC ProjectPhysicalOperator::open(Trx *trx)
 
 RC ProjectPhysicalOperator::next()
 {
+  /// 由于我改了代码，导致之前的题目NULL过不了.....
+  /// 我的源思路是为了处理 select length('das') 这个case
+  /// 但是优化阶段会将NULL相关的题目后续算子清除
+  if (no_child && !emitted_) {
+    emitted_                = true;
+    const auto &expressions = tuple_.expressions();
+    for (const auto &expression : expressions) {
+      if (expression->type() == ExprType::FIELD) {
+        return RC::RECORD_EOF;
+      } else if (expression->type() == ExprType::SYS_FUNCTION) {
+        const auto &params = static_cast<SysFunctionExpr *>(expression.get())->params();
+        for (const auto &param : params) {
+          if (param->type() == ExprType::FIELD) {
+            return RC::RECORD_EOF;
+          }
+        }
+      }
+    }
+    return RC::SUCCESS;
+  }
   if (children_.empty()) {
     return RC::RECORD_EOF;
   }
@@ -56,6 +76,9 @@ RC ProjectPhysicalOperator::close()
 }
 Tuple *ProjectPhysicalOperator::current_tuple()
 {
+  if (no_child) {
+    return &tuple_;
+  }
   tuple_.set_tuple(children_[0]->current_tuple());
   return &tuple_;
 }
@@ -79,6 +102,10 @@ RC ProjectPhysicalOperator::tuple_schema(TupleSchema &schema) const
       // 对于非字段表达式（例如计算表达式），使用 expression->name()
       column_name = expression->name();
     }
+    if (!expression->alias().empty()) {
+      column_name = expression->alias();
+    }
+    LOG_DEBUG("add column %s", column_name.c_str());
     schema.append_cell(column_name.c_str());
   }
   return RC::SUCCESS;

@@ -61,13 +61,14 @@ RC UpdateStmt::create(Db *db, const UpdateSqlNode &update, Stmt *&stmt)
     return rc;
   }
 
-  // if (field_meta->type() != value.attr_type()) {
-  //   if (!Value::convert(value.attr_type(), field_meta->type(), value)) {
-  //     LOG_WARN("update value cannot convert into target type, src=%s, target=%s",
-  //                attr_type_to_string(value.attr_type()), attr_type_to_string(field_meta->type()));
-  //     return RC::INVALID_ARGUMENT;
-  //   }
-  // }
+  if (field_meta->type() != value.attr_type()) {
+    // TODO: 类型转换 (value.cpp)
+    // if (!Value::convert(value.attr_type(), field_meta->type(), value)) {
+      LOG_WARN("update value cannot convert into target type, src=%s, target=%s",
+                 attr_type_to_string(value.attr_type()), attr_type_to_string(field_meta->type()));
+      return RC::SCHEMA_FIELD_TYPE_MISMATCH;
+    // }
+  }
 
   // 创建 UpdateStmt 对象
   Field field = Field(table, field_meta);

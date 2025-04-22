@@ -30,6 +30,8 @@ ArithmeticExpr *create_arithmetic_expression(ArithmeticExpr::Type type,
     // when facing problems, I will add more code here. 
     // 或许可以考虑unique_ptr包装所有的函数?
     context->add_object(expr);
+    context->remove_object(left);
+    context->remove_object(right);
     expr->set_name(token_name(sql_string, llocp));
     return expr;
 }
@@ -42,6 +44,7 @@ UnboundAggregateExpr *create_aggregate_expression(
 {
     UnboundAggregateExpr *expr = new UnboundAggregateExpr(aggregate_name, child.release());
     context->add_object(expr);
+    context->remove_object(child.get());  // 移除child的所有权
     expr->set_name(token_name(sql_string, llocp));
     return expr;
 }
@@ -53,6 +56,7 @@ UnboundAggregateExpr *create_aggregate_expression(const char *aggregate_name,
                                                  ParseContext *context) {
     UnboundAggregateExpr *expr = new UnboundAggregateExpr(aggregate_name, child);
     context->add_object(expr);
+    context->remove_object(child);
     expr->set_name(token_name(sql_string, llocp));
     return expr;
 }
@@ -117,6 +121,7 @@ UnboundAggregateExpr *create_aggregate_expression(const char *aggregate_name,
         EXPLAIN
         STORAGE
         FORMAT
+        AS
         EQ
         LT
         GT
@@ -125,6 +130,9 @@ UnboundAggregateExpr *create_aggregate_expression(const char *aggregate_name,
         NE
         IS_TOKEN
         LIKE
+        SYS_LENGTH
+        SYS_ROUND
+        SYS_DATE_FORMAT
 
 /** union 中定义各种数据类型，真实生成的代码也是union类型，所以不能有非POD类型的数据 **/
 %union {
@@ -132,15 +140,17 @@ UnboundAggregateExpr *create_aggregate_expression(const char *aggregate_name,
   ConditionSqlNode *                         condition;
   Value *                                    value;
   enum CompOp                                comp;
+  enum SysFuncType                           functype;
   RelAttrSqlNode *                           rel_attr;
   vector<AttrInfoSqlNode> *             attr_infos;
   AttrInfoSqlNode *                          attr_info;
   Expression *                               expression;
+  RelationSqlNode *                            relation;
   vector<unique_ptr<Expression>> * expression_list;
   vector<Value> *                       value_list;
   vector<ConditionSqlNode> *            condition_list;
   vector<RelAttrSqlNode> *              rel_attr_list;
-  vector<string> *                 relation_list;
+  vector<RelationSqlNode> *                 relation_list;
   char *                                     cstring;
   int                                        number;
   float                                      floats;
@@ -159,7 +169,9 @@ UnboundAggregateExpr *create_aggregate_expression(const char *aggregate_name,
 %type <condition>           condition
 %type <value>               value
 %type <number>              number
-%type <cstring>             relation
+%type <functype>            sys_func_type
+%type <relation>             relation
+%type <cstring>             alias
 %type <comp>                comp_op
 %type <rel_attr>            rel_attr
 %type <attr_infos>          attr_def_list
@@ -171,6 +183,7 @@ UnboundAggregateExpr *create_aggregate_expression(const char *aggregate_name,
 %type <relation_list>       rel_list
 %type <expression>          expression
 %type <expression>          aggregate_func
+%type <expression>          sys_func
 %type <expression_list>     expression_list
 %type <expression_list>     group_by
 %type <sql_node>            calc_stmt
@@ -488,7 +501,6 @@ value:
       free(tmp);
     }
     | NULL_T {
-      // LOG_DEBUG("DEBUG: reduce NULL_T");
       $$ = new Value();
       $$->set_null();
       context->add_object($$);
@@ -532,7 +544,15 @@ update_stmt:      /*  update 语句的语法解析树*/
     }
     ;
 select_stmt:        /*  select 语句的语法解析树*/
-    SELECT expression_list FROM rel_list where group_by
+    SELECT expression_list {
+      $$ = new ParsedSqlNode(SCF_SELECT);
+      context->add_object($$);
+      if ($2 != nullptr) {
+        $$->selection.expressions.swap(*$2);
+        delete $2;
+      }
+    }
+    | SELECT expression_list FROM rel_list where group_by
     {
       LOG_DEBUG("DEBUG: select_stmt");
       $$ = new ParsedSqlNode(SCF_SELECT);
@@ -563,6 +583,7 @@ select_stmt:        /*  select 语句的语法解析树*/
 calc_stmt:
     CALC expression_list
     {
+      LOG_DEBUG("DEBUG: reduce calc_stmt");
       $$ = new ParsedSqlNode(SCF_CALC);
       context->add_object($$);
       $$->calc.expressions.swap(*$2);
@@ -571,22 +592,31 @@ calc_stmt:
     ;
 
 expression_list:
-    expression
+    expression alias
     {
       $$ = new vector<unique_ptr<Expression>>;
       context->add_object($$);
+      if ($2 != nullptr) {
+        $1->set_alias($2);
+      }
       $$->emplace_back($1);
+      // free($2);
       context->remove_object($1);
     }
-    | expression COMMA expression_list
+    | expression alias COMMA expression_list
     {
-      if ($3 != nullptr) {
-        $$ = $3;
+      if ($4 != nullptr) {
+        $$ = $4;
       } else {
         $$ = new vector<unique_ptr<Expression>>;
         context->add_object($$);
       }
+      if ($2 != nullptr) {
+        $1->set_alias($2);
+      }
+      // push to front
       $$->emplace($$->begin(), $1);
+      // free($2);
       context->remove_object($1);
     }
     ;
@@ -615,6 +645,7 @@ expression:
       $$ = new ValueExpr(*$1);  // 拷贝构造
       context->add_object($$);
       $$->set_name(token_name(sql_string, &@$));
+      context->remove_object($1);
       delete $1;
     }
     | rel_attr {
@@ -622,6 +653,7 @@ expression:
       $$ = new UnboundFieldExpr(node->relation_name, node->attribute_name);
       context->add_object($$);
       $$->set_name(token_name(sql_string, &@$));
+      context->remove_object($1);
       delete $1;
     }
     | '*' {
@@ -632,6 +664,9 @@ expression:
     // 聚合函数Reduce
     | aggregate_func
     {
+      $$ = $1;
+    }
+    | sys_func {
       $$ = $1;
     }
     // your code here
@@ -658,10 +693,42 @@ aggregate_func:
     }
     ;
 
+sys_func_type:
+    SYS_LENGTH { $$ = SysFuncType::LENGTH; }
+    | SYS_ROUND { $$ = SysFuncType::ROUND; }
+    | SYS_DATE_FORMAT { $$ = SysFuncType::DATE_FORMAT; }
+    ;
+
+sys_func:
+  sys_func_type LBRACE expression_list RBRACE
+  {
+    LOG_DEBUG("DEBUG: reduce sys_func");
+    $$ = new SysFunctionExpr($1,*$3); // 拷贝构造
+    $$->set_name(token_name(sql_string, &@$));
+    context->add_object($$);
+    delete $3; // 释放 expression_list
+    context->remove_object($3);
+  }
+  ;
+
+alias:
+    /* empty */
+    {
+      $$ = nullptr;
+    }
+    | AS ID {
+      $$ = $2;
+    }
+    | ID {
+      $$ = $1;
+    }
+    ;
+
 rel_attr:
     ID {
       $$ = new RelAttrSqlNode;
       context->add_object($$);
+      $$->relation_name = string("");
       $$->attribute_name = $1;
     }
     | ID DOT ID {
@@ -673,25 +740,37 @@ rel_attr:
     ;
 
 relation:
-    ID {
-      $$ = $1;
+    ID alias {
+      $$ = new RelationSqlNode;
+      context->add_object($$);
+      $$->relation_name = $1;
+      if ($2 != nullptr) {
+        $$->alias_name = $2;
+      }
     }
     ;
 rel_list:
     relation {
-      $$ = new vector<string>();
+      // $$ = new vector<string>();
+      // $$->push_back($1);
+      $$ = new vector<RelationSqlNode>;
+      $$->emplace_back(*$1);
       context->add_object($$);
-      $$->push_back($1);
+      context->remove_object($1);
+      delete $1;
     }
     | relation COMMA rel_list {
       if ($3 != nullptr) {
         $$ = $3;
       } else {
-        $$ = new vector<string>;
+        // $$ = new vector<string>;
+        $$ = new vector<RelationSqlNode>;
         context->add_object($$);
       }
-
-      $$->insert($$->begin(), $1);
+      $$->insert($$->begin(), *$1);
+      // $$->insert($$->begin(), $1);
+      context->remove_object($1);
+      delete $1;
     }
     ;
 
@@ -729,7 +808,8 @@ condition_list:
         context->add_object($$);
       }
       $1->conjunction_type = ConjunctionType::CONJ_AND;
-      $$->emplace_back(std::move(*$1));
+      $$->insert($$->begin(), std::move(*$1));
+      // $$->emplace_back(std::move(*$1));
       context->remove_object($1);
       delete $1;
     }

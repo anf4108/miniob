@@ -9,6 +9,7 @@ RC UpdatePhysicalOperator::next() {
   if (children_.empty()) {
     return RC::RECORD_EOF;
   }
+  LOG_INFO("children[0]: %x",&children_[0]);
   return children_[0]->next();
 }
 
@@ -16,44 +17,57 @@ RC UpdatePhysicalOperator::open(Trx *trx) {
   RC rc = children_[0]->open(trx);
   if (rc != RC::SUCCESS)
     return rc;
+
+  vector<RID> to_update;
   vector<vector<char>> records;
+  
+  // 1. 先收集所有需要更新的记录ID和内容
   while ((rc = children_[0]->next()) == RC::SUCCESS) {
     auto *tuple = static_cast<RowTuple *>(children_[0]->current_tuple());
     auto &record = tuple->record();
+    
+    // 保存记录ID和内容
+    to_update.push_back(record.rid());
     vector<char> r(table_->table_meta().record_size());
     memcpy(r.data(), record.data(), r.size());
-    rc = table_->delete_record(record);
-    if (rc != RC::SUCCESS) {
-      auto rc1 = insert_all(records);
-      if (rc1 != RC::SUCCESS) {
-        LOG_ERROR("failed to rollback update");
-      }
-      return rc;
-    }
     records.push_back(r);
   }
+  // 2. 释放所有读锁
   children_[0]->close();
+  children_.clear();
+  
   if (rc != RC::RECORD_EOF) {
     return rc;
   }
+  // 3. 按固定顺序获取写锁并更新
   vector<RID> inserted;
-  for (auto it = records.rbegin(); it != records.rend(); it++) {
+  for (size_t i = 0; i < to_update.size(); i++) {
+    Record record;
+    rc = table_->visit_record(to_update[i], [&](Record &rec) {
+      record = rec;
+      return true;
+    });
+    // 删除原记录
+    rc = table_->delete_record(record);
+    // 插入更新后的记录
     RID rid;
-    rc = update(*it, rid);
-    if (rc != RC::SUCCESS) {
-      RC rc1 = RC::SUCCESS;
-      rc1 = remove_all(inserted);
-      if (rc1 != RC::SUCCESS) {
-        LOG_ERROR("failed to rollback update, error in remove inserted");
-      }
-      rc1 = insert_all(records);
-      if (rc1 != RC::SUCCESS) {
-        LOG_ERROR("failed to rollback update, error in insert deleted");
-      }
-      return rc;
-    }
+    rc = update(records[i], rid);
     inserted.push_back(rid);
+    // 回滚 暂无需求
+    // if (rc != RC::SUCCESS) {
+    //   // 回滚已更新的记录
+    //   RC rc1 = remove_all(inserted);
+    //   if (rc1 != RC::SUCCESS) {
+    //     LOG_ERROR("failed to rollback update, error in remove inserted");
+    //   }
+    //   rc1 = insert_all(records);
+    //   if (rc1 != RC::SUCCESS) {
+    //     LOG_ERROR("failed to rollback update, error in insert deleted");
+    //   }
+    //   return rc;
+    // }
   }
+  
   return RC::SUCCESS;
 }
 
@@ -107,4 +121,8 @@ RC UpdatePhysicalOperator::update(vector<char> v, RID &rid) {
   int offset = meta->offset();
   memcpy(v.data() + offset, value_.data(), meta->len());
   return insert(v, rid);
+}
+
+RC UpdatePhysicalOperator::close() {
+  return RC::SUCCESS;
 }

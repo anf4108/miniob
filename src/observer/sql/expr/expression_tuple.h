@@ -72,14 +72,18 @@ public:
     return rc;
   }
 
+  const vector<ExprPointerType> &expressions() const { return expressions_; }
+
 private:
   RC get_value(const ExprPointerType &expression, Value &value) const
   {
     RC rc = RC::SUCCESS;
     if (child_tuple_ != nullptr) {
       rc = expression->get_value(*child_tuple_, value);
+      LOG_DEBUG("get value from child tuple. rc=%s", strrc(rc));
     } else {
       rc = expression->try_get_value(value);
+      LOG_DEBUG("get value from expression. rc=%s", strrc(rc));
     }
     return rc;
   }

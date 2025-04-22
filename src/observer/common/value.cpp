@@ -292,6 +292,7 @@ string Value::to_string() const
 int Value::compare(const Value &other) const
 {
   if (this->is_null() || other.is_null()) {
+    LOG_DEBUG("DETECT NULL VALUE, RETURNING INT32_MAX");
     return INT32_MAX;  // 表示false比较 , unknown result
   }
   return DataType::type_instance(this->attr_type_)->compare(*this, other);
@@ -319,7 +320,7 @@ int Value::get_int() const
     }
     case AttrType::DATES: {
       // 底层支持, 但接口不支持
-      LOG_TRACE("failed to convert date to number. s=%d", value_.int_value_);
+      return value_.int_value_;
       return 0;
     }
     default: {
@@ -351,7 +352,7 @@ float Value::get_float() const
       return float(value_.bool_value_);
     } break;
     case AttrType::DATES: {
-      LOG_TRACE("failed to convert date to float. s=%d", value_.int_value_);
+      return (float)(value_.int_value_);
       return 0.0;
     } break;
     default: {

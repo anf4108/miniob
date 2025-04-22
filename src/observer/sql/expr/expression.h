@@ -39,15 +39,16 @@ enum class ExprType
   UNBOUND_FIELD,        ///< 未绑定的字段，需要在resolver阶段解析为FieldExpr
   UNBOUND_AGGREGATION,  ///< 未绑定的聚合函数，需要在resolver阶段解析为AggregateExpr
 
-  FIELD,        ///< 字段。在实际执行时，根据行数据内容提取对应字段的值
-  VALUE,        ///< 常量值
-  CAST,         ///< 需要做类型转换的表达式
-  COMPARISON,   ///< 需要做比较的表达式
-  CONJUNCTION,  ///< 多个表达式使用同一种关系(AND或OR)来联结
-  ARITHMETIC,   ///< 算术运算
-  AGGREGATION,  ///< 聚合运算
-  IS,           ///< 判断是否为NULL or Bool
-  LIKE,         //< 判断是否LIKE某个Pattern
+  FIELD,         ///< 字段。在实际执行时，根据行数据内容提取对应字段的值
+  VALUE,         ///< 常量值
+  CAST,          ///< 需要做类型转换的表达式
+  COMPARISON,    ///< 需要做比较的表达式
+  CONJUNCTION,   ///< 多个表达式使用同一种关系(AND或OR)来联结
+  ARITHMETIC,    ///< 算术运算
+  AGGREGATION,   ///< 聚合运算
+  SYS_FUNCTION,  ///< 系统函数调用
+  IS,            ///< 判断是否为NULL or Bool
+  LIKE,          //< 判断是否LIKE某个Pattern
 };
 
 /**
@@ -113,6 +114,16 @@ public:
   virtual void        set_name(string name) { name_ = name; }
 
   /**
+   * @brief 表达式的别名
+   * @details 在SQL语句中，用户可以给表达式起一个别名
+   */
+  virtual string alias() const { return alias_; }
+  const char    *alias_c_str() const { return alias_.c_str(); }
+  virtual void   set_alias(string alias) { alias_ = alias; }
+
+  virtual string table_alias() const { return table_alias_; }
+  virtual void   set_table_alias(string table_alias) { table_alias_ = table_alias; }
+  /**
    * @brief 表达式在下层算子返回的 chunk 中的位置
    */
   virtual int  pos() const { return pos_; }
@@ -134,6 +145,8 @@ protected:
 
 private:
   string name_;
+  string alias_;        ///< 别名
+  string table_alias_;  ///< 表别名
 };
 
 class StarExpr : public Expression
@@ -157,8 +170,7 @@ private:
 class UnboundFieldExpr : public Expression
 {
 public:
-  UnboundFieldExpr(const string &table_name, const string &field_name)
-      : table_name_(table_name), field_name_(field_name)
+  UnboundFieldExpr(const string table_name, const string field_name) : table_name_(table_name), field_name_(field_name)
   {}
 
   virtual ~UnboundFieldExpr() = default;
@@ -170,6 +182,9 @@ public:
 
   const char *table_name() const { return table_name_.c_str(); }
   const char *field_name() const { return field_name_.c_str(); }
+
+  void set_field_name(const std::string &field_name) { field_name_ = field_name; }
+  void set_table_name(const std::string &table_name) { table_name_ = table_name; }
 
 private:
   string table_name_;
@@ -531,4 +546,94 @@ private:
   CompOp                      comp_;  // 只允许 LIKE or NOT_LIKE
   std::unique_ptr<Expression> left_;
   std::unique_ptr<Expression> right_;
+};
+
+/**
+ * @brief 系统函数表达式
+ * @ingroup Expression
+ */
+class SysFunctionExpr : public Expression
+{
+public:
+  SysFunctionExpr(SysFuncType sys_func_type, vector<unique_ptr<Expression>> &params)
+      : sys_func_type_(sys_func_type), params_(std::move(params))
+  {}
+  SysFunctionExpr(SysFuncType sys_func_type, vector<Expression *> &params) : sys_func_type_(sys_func_type)
+  {
+    for (auto &param : params)
+      params_.emplace_back(param);
+  }
+  virtual ~SysFunctionExpr() = default;
+
+  ExprType type() const override { return ExprType::SYS_FUNCTION; }
+  AttrType value_type() const override;
+
+  RC get_func_length_value(const Tuple &tuple, Value &value) const;
+
+  RC get_func_round_value(const Tuple &tuple, Value &value) const;
+
+  RC get_func_date_format_value(const Tuple &tuple, Value &value) const;
+
+  RC get_value(const Tuple &tuple, Value &value) const override
+  {
+    RC rc = RC::SUCCESS;
+    switch (sys_func_type_) {
+      case SysFuncType::LENGTH: {
+        rc = get_func_length_value(tuple, value);
+        break;
+      }
+      case SysFuncType::ROUND: {
+        rc = get_func_round_value(tuple, value);
+        break;
+      }
+      case SysFuncType::DATE_FORMAT: {
+        rc = get_func_date_format_value(tuple, value);
+        break;
+      }
+      default: {
+        LOG_WARN("unsupported system function type. %d", sys_func_type_);
+        rc = RC::INTERNAL;
+        break;
+      }
+    }
+    return rc;
+  }
+
+  RC try_get_func_length_value(Value &value) const;
+
+  RC try_get_func_round_value(Value &value) const;
+
+  RC try_get_func_date_format_value(Value &value) const;
+
+  RC try_get_value(Value &value) const override
+  {
+    RC rc = RC::SUCCESS;
+    LOG_DEBUG("try_get_value sys_func_type_ %d", sys_func_type_);
+    switch (sys_func_type_) {
+      case SysFuncType::LENGTH: {
+        return try_get_func_length_value(value);
+      }
+      case SysFuncType::ROUND: {
+        return try_get_func_round_value(value);
+      }
+      case SysFuncType::DATE_FORMAT: {
+        return try_get_func_date_format_value(value);
+      }
+      default: {
+        LOG_WARN("unsupported system function type. %d", sys_func_type_);
+        return RC::INTERNAL;
+      }
+    }
+    return rc;
+  }
+
+  SysFuncType sys_func_type() const { return sys_func_type_; }
+
+  vector<unique_ptr<Expression>> &params() { return params_; }
+
+  RC check_params_type_and_number() const;
+
+private:
+  SysFuncType                    sys_func_type_;
+  vector<unique_ptr<Expression>> params_;
 };

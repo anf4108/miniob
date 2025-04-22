@@ -15,6 +15,7 @@ See the Mulan PSL v2 for more details. */
 #include "sql/operator/index_scan_physical_operator.h"
 #include "storage/index/index.h"
 #include "storage/trx/trx.h"
+#include <cassert>
 
 IndexScanPhysicalOperator::IndexScanPhysicalOperator(Table *table, Index *index, ReadWriteMode mode,
     const Value *left_value, bool left_inclusive, const Value *right_value, bool right_inclusive)
@@ -46,11 +47,13 @@ RC IndexScanPhysicalOperator::open(Trx *trx)
   }
 
   record_handler_ = table_->record_handler();
+  assert(record_handler_ != nullptr);
   if (nullptr == record_handler_) {
     LOG_WARN("invalid record handler");
     index_scanner->destroy();
     return RC::INTERNAL;
   }
+  assert(index_scanner != nullptr);
   index_scanner_ = index_scanner;
 
   tuple_.set_schema(table_, table_->table_meta().field_metas());
@@ -64,6 +67,7 @@ RC IndexScanPhysicalOperator::next()
   RID rid;
   RC  rc = RC::SUCCESS;
 
+  assert(index_scanner_ != nullptr);
   bool filter_result = false;
   while (RC::SUCCESS == (rc = index_scanner_->next_entry(&rid))) {
     rc = record_handler_->get_record(rid, current_record_);
