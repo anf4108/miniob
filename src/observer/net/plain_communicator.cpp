@@ -252,6 +252,7 @@ RC PlainCommunicator::write_result_internal(SessionEvent *event, bool &need_disc
   }
 
   if (rc == RC::INVALID_ARGUMENT) {
+    sql_result->close();
     event->sql_result()->set_return_code(rc);
     // 应该输出Failure状态
     return write_state(event, need_disconnect);
