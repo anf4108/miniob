@@ -92,7 +92,7 @@ RC LogicalPlanGenerator::create_plan(SelectStmt *select_stmt, unique_ptr<Logical
 
   unique_ptr<LogicalOperator> table_oper(nullptr);
   last_oper = &table_oper;
-  assert(select_stmt->tables().size() > 0);
+
   const vector<Table *> &tables        = select_stmt->tables();
   const vector<string>  &table_aliases = select_stmt->table_aliases();
 
@@ -179,9 +179,6 @@ RC LogicalPlanGenerator::create_plan(FilterStmt *filter_stmt, unique_ptr<Logical
           auto sub_query_expr = static_cast<SubqueryExpr *>(cmp_expr_->right().get());
           LOG_DEBUG("the subquery expression is %s", sub_query_expr->name());
           auto sub_query_stmt = static_cast<SelectStmt *>(sub_query_expr->stmt().get());
-          assert(sub_query_stmt != nullptr);
-          assert(sub_query_stmt->type() == StmtType::SELECT);
-          assert(sub_query_stmt->tables().size() == 1);
           unique_ptr<LogicalOperator> sub_query_oper;
           rc = create_plan(sub_query_stmt, sub_query_oper);
           if (rc != RC::SUCCESS) {
