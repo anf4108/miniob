@@ -55,9 +55,15 @@ enum CompOp
   IS_NOT,       ///< "IS NOT"
   LIKE_OP,      ///< "LIKE"
   NOT_LIKE_OP,  ///< "NOT LIKE"
+  /// for sub-query
+  IN_OP,
+  NOT_IN_OP,
+  EXISTS_OP,
+  NOT_EXISTS_OP,
   NO_OP
 };
 
+// sometimes for debugging
 inline const char *comp_op_to_string(CompOp op)
 {
   switch (op) {
@@ -71,6 +77,10 @@ inline const char *comp_op_to_string(CompOp op)
     case IS_NOT: return "IS NOT";
     case LIKE_OP: return "LIKE";
     case NOT_LIKE_OP: return "NOT LIKE";
+    case IN_OP: return "IN";
+    case NOT_IN_OP: return "NOT IN";
+    case EXISTS_OP: return "EXISTS";
+    case NOT_EXISTS_OP: return "NOT EXISTS";
     default: return "";
   }
 }  // namespace common
@@ -99,7 +109,8 @@ enum SysFuncType
  * @ingroup SQLParser
  * @details 条件比较就是SQL查询中的 where a>b 这种。
  * 选择直接用expression进行抽象，
- * 直接用一个ComparisonExpr表示
+ * 直接用一个ComparisonExpr表示，
+ * 而现在要加入子查询功能，尝试进行适配。
  */
 struct ConditionSqlNode
 {

@@ -85,6 +85,9 @@ public:
 
   vector<unique_ptr<PhysicalOperator>> &children() { return children_; }
 
+  void set_outer_tuple(Tuple *tuple) { outer_tuple = tuple; }
+
 protected:
   vector<unique_ptr<PhysicalOperator>> children_;
+  Tuple                               *outer_tuple = nullptr;
 };

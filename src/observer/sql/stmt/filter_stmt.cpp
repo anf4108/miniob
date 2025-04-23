@@ -42,6 +42,7 @@ RC FilterStmt::create(Db *db, Table *default_table, std::unordered_map<std::stri
   // 绑定条件表达式, 将条件表达式中的字段解析为具体的表字段
   BinderContext binder_context;
   for (auto &table : *tables) {
+    // context中同时考虑到了父查询中的Table
     binder_context.add_table(table.second);
   }
   ExpressionBinder expression_binder(binder_context);
@@ -55,10 +56,15 @@ RC FilterStmt::create(Db *db, Table *default_table, std::unordered_map<std::stri
       case CompOp::NOT_EQUAL:
       case CompOp::LESS_THAN:
       case CompOp::GREAT_EQUAL:
-      case CompOp::GREAT_THAN: {
+      case CompOp::GREAT_THAN:
+      /// for sub-query
+      case CompOp::IN_OP:
+      case CompOp::NOT_IN_OP:
+      case CompOp::EXISTS_OP:
+      case CompOp::NOT_EXISTS_OP: {
+        if (condition.comp_op == CompOp::IN_OP)
+          LOG_DEBUG("Processing IN_OP condition");
         conditions_exprs.emplace_back(
-            new ComparisonExpr(condition.comp_op, std::move(condition.left_expr), std::move(condition.right_expr)));
-        unique_ptr<Expression> condition_expr(
             new ComparisonExpr(condition.comp_op, std::move(condition.left_expr), std::move(condition.right_expr)));
       } break;
       case CompOp::IS:

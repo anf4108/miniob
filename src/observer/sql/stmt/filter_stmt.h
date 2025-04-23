@@ -44,5 +44,6 @@ public:
       std::vector<ConditionSqlNode> &conditions, FilterStmt *&stmt);
 
 private:
-  vector<unique_ptr<Expression>> conditions_;  // 目前支持AND
+  vector<unique_ptr<Expression>> conditions_;         // 目前支持AND
+  vector<char>                   conjunction_types_;  // 发现复杂子查询中需要支持 AND or OR, 后续扩展
 };

@@ -30,7 +30,13 @@ RC ProjectPhysicalOperator::open(Trx *trx)
     return RC::SUCCESS;
   }
   PhysicalOperator *child = children_[0].get();
-  RC                rc    = child->open(trx);
+
+  if (outer_tuple != nullptr) {
+    LOG_DEBUG("msg from project_phy_oper: we are in subquery");
+    child->set_outer_tuple(outer_tuple);
+  }
+
+  RC rc = child->open(trx);
   if (rc != RC::SUCCESS) {
     LOG_WARN("failed to open child operator: %s", strrc(rc));
     return rc;

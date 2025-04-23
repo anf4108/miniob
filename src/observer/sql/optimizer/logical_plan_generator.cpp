@@ -92,7 +92,7 @@ RC LogicalPlanGenerator::create_plan(SelectStmt *select_stmt, unique_ptr<Logical
 
   unique_ptr<LogicalOperator> table_oper(nullptr);
   last_oper = &table_oper;
-
+  assert(select_stmt->tables().size() > 0);
   const vector<Table *> &tables        = select_stmt->tables();
   const vector<string>  &table_aliases = select_stmt->table_aliases();
 
@@ -154,13 +154,42 @@ RC LogicalPlanGenerator::create_plan(SelectStmt *select_stmt, unique_ptr<Logical
 
 RC LogicalPlanGenerator::create_plan(FilterStmt *filter_stmt, unique_ptr<LogicalOperator> &logical_operator)
 {
+  RC                              rc;
   vector<unique_ptr<Expression>>  cmp_exprs;
   vector<unique_ptr<Expression>> &expressions = filter_stmt->conditions();
-  // 原本的逻辑中考虑到了类型之间转换的cost,是否需要考虑在Expr中实现或在本处实现?
   for (auto &expr : expressions) {
     unique_ptr<Expression> cmp_expr(nullptr);
     switch (expr->type()) {
       case ExprType::COMPARISON: {
+        auto cmp_expr_ = static_cast<ComparisonExpr *>(expr.get());
+        // 当比较表达式的左右子树中有子查询时，创建子查询的逻辑算子
+        if (cmp_expr_->left() != nullptr && cmp_expr_->left()->type() == ExprType::SUB_QUERY) {
+          auto                        sub_query_expr = static_cast<SubqueryExpr *>(cmp_expr_->left().get());
+          auto                        sub_query_stmt = static_cast<SelectStmt *>(sub_query_expr->stmt().get());
+          unique_ptr<LogicalOperator> sub_query_oper;
+          rc = create_plan(sub_query_stmt, sub_query_oper);
+          if (rc != RC::SUCCESS) {
+            LOG_WARN("failed to create subquery logical operator. rc=%s", strrc(rc));
+            return rc;
+          }
+          sub_query_expr->set_logical_operator(std::move(sub_query_oper));
+        }
+        if (cmp_expr_->right() != nullptr && cmp_expr_->right()->type() == ExprType::SUB_QUERY) {
+          // 右子树是子查询
+          auto sub_query_expr = static_cast<SubqueryExpr *>(cmp_expr_->right().get());
+          LOG_DEBUG("the subquery expression is %s", sub_query_expr->name());
+          auto sub_query_stmt = static_cast<SelectStmt *>(sub_query_expr->stmt().get());
+          assert(sub_query_stmt != nullptr);
+          assert(sub_query_stmt->type() == StmtType::SELECT);
+          assert(sub_query_stmt->tables().size() == 1);
+          unique_ptr<LogicalOperator> sub_query_oper;
+          rc = create_plan(sub_query_stmt, sub_query_oper);
+          if (rc != RC::SUCCESS) {
+            LOG_WARN("failed to create subquery logical operator. rc=%s", strrc(rc));
+            return rc;
+          }
+          sub_query_expr->set_logical_operator(std::move(sub_query_oper));
+        }
         cmp_expr = unique_ptr<ComparisonExpr>(static_cast<ComparisonExpr *>(expr.release()));
         break;
       }

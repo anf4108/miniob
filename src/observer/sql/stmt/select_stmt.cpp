@@ -34,7 +34,7 @@ SelectStmt::~SelectStmt()
 RC SelectStmt::convert_alias_to_name(Expression *expr, std::shared_ptr<std::unordered_map<string, string>> alias2name)
 {
   // 对表达式进行递归替换
-  if (expr->type() == ExprType::VALUE) {
+  if (expr->type() == ExprType::VALUE || expr->type() == ExprType::VALUES || expr->type() == ExprType::SUB_QUERY) {
     return RC::SUCCESS;
   }
   if (expr->type() == ExprType::ARITHMETIC) {
@@ -114,7 +114,8 @@ RC SelectStmt::convert_alias_to_name(Expression *expr, std::shared_ptr<std::unor
 
 RC SelectStmt::create(Db *db, SelectSqlNode &select_sql, Stmt *&stmt,
     std::shared_ptr<std::unordered_map<string, string>> name2alias,
-    std::shared_ptr<std::unordered_map<string, string>> alias2name)
+    std::shared_ptr<std::unordered_map<string, string>> alias2name,
+    std::shared_ptr<std::vector<string>>                loaded_relation_names)
 {
   if (nullptr == db) {
     LOG_WARN("invalid argument. db is null");
@@ -125,12 +126,25 @@ RC SelectStmt::create(Db *db, SelectSqlNode &select_sql, Stmt *&stmt,
     name2alias = std::make_shared<std::unordered_map<string, string>>();
   if (alias2name == nullptr)
     alias2name = std::make_shared<std::unordered_map<string, string>>();
+  if (loaded_relation_names == nullptr)
+    loaded_relation_names = std::make_shared<std::vector<string>>();
   BinderContext binder_context;
 
   // collect tables in `from` statement
   vector<Table *>                tables;
   unordered_map<string, Table *> table_map;
   std::vector<std::string>       table_aliases;
+
+  // add table in loaded_relation_name into table_map
+  for (auto &rel_name : *loaded_relation_names) {
+    Table *table = db->find_table(rel_name.c_str());
+    if (nullptr == table) {
+      LOG_WARN("no such table. db=%s, table_name=%s", db->name(), rel_name.c_str());
+      return RC::SCHEMA_TABLE_NOT_EXIST;
+    }
+    table_map.insert({rel_name, table});
+    LOG_DEBUG("add table from name2alias extraly(sub-query): %s", rel_name.c_str());
+  }
 
   for (size_t i = 0; i < select_sql.relations.size(); i++) {
     const char *table_name = select_sql.relations[i].relation_name.c_str();
@@ -165,12 +179,15 @@ RC SelectStmt::create(Db *db, SelectSqlNode &select_sql, Stmt *&stmt,
       (*alias2name)[select_sql.relations[i].alias_name] = string(table_name);
       (*name2alias)[table_name]                         = select_sql.relations[i].alias_name;
     }
+    // 把table加载入记录中
+    loaded_relation_names->push_back(table_name);
   }
 
   // 处理 select 中的表达式(projection)中带有别名的字段替换为真实表名,列名不会替换
   for (auto &expression : select_sql.expressions) {
     RC rc = convert_alias_to_name(expression.get(), alias2name);
-    LOG_DEBUG("convert alias from %s to %s", expression->name(), expression->alias().c_str());
+    if (!expression->alias().empty())
+      LOG_DEBUG("convert alias from %s to %s", expression->name(), expression->alias().c_str());
     if (rc != RC::SUCCESS) {
       LOG_WARN("failed to convert alias to name");
       return rc;
@@ -247,6 +264,7 @@ RC SelectStmt::create(Db *db, SelectSqlNode &select_sql, Stmt *&stmt,
   }
 
   for (unique_ptr<Expression> &expression : select_sql.expressions) {
+    LOG_DEBUG("Ready to bind expression: %s,trying..", expression->name());
     RC rc = expression_binder.bind_expression(expression, bound_expressions);
     if (OB_FAIL(rc)) {
       LOG_INFO("bind expression failed. rc=%s", strrc(rc));
@@ -261,6 +279,64 @@ RC SelectStmt::create(Db *db, SelectSqlNode &select_sql, Stmt *&stmt,
     if (OB_FAIL(rc)) {
       LOG_INFO("bind expression failed. rc=%s", strrc(rc));
       return rc;
+    }
+  }
+
+  // 递归构造子查询
+  for (auto &condition : select_sql.conditions) {
+    // 处理EXISTS
+    if (condition.left_expr == nullptr && condition.right_expr != nullptr) {
+      if (condition.right_expr->type() == ExprType::SUB_QUERY &&
+          (condition.comp_op == CompOp::EXISTS_OP || condition.comp_op == CompOp::NOT_EXISTS_OP)) {
+        SubqueryExpr *subquery_expr = static_cast<SubqueryExpr *>(condition.right_expr.get());
+        Stmt         *stmt          = nullptr;
+        RC            rc            = SelectStmt::create(
+            db, subquery_expr->sub_query_sn()->selection, stmt, name2alias, alias2name, loaded_relation_names);
+        if (rc != RC::SUCCESS) {
+          LOG_WARN("cannot construct subquery stmt");
+          return rc;
+        }
+        // 检查子查询的合法性：子查询的查询的属性只能有一个,行数可以无限
+        RC rc_ = subquery_expr->check_sub_select_legal(db);
+        if (rc_ != RC::SUCCESS) {
+          return rc_;
+        }
+        subquery_expr->set_stmt(unique_ptr<SelectStmt>(static_cast<SelectStmt *>(stmt)));
+      }
+    } else {
+      // 左右表达式均递归构造
+      if (condition.left_expr != nullptr && condition.left_expr->type() == ExprType::SUB_QUERY) {
+        SubqueryExpr *subquery_expr = static_cast<SubqueryExpr *>(condition.left_expr.get());
+        Stmt         *stmt          = nullptr;
+        RC            rc            = SelectStmt::create(
+            db, subquery_expr->sub_query_sn()->selection, stmt, name2alias, alias2name, loaded_relation_names);
+        if (rc != RC::SUCCESS) {
+          LOG_WARN("cannot construct subquery stmt");
+          return rc;
+        }
+        // 检查子查询的合法性：子查询的查询的属性只能有一个,行数可以无限
+        RC rc_ = subquery_expr->check_sub_select_legal(db);
+        if (rc_ != RC::SUCCESS) {
+          return rc_;
+        }
+        subquery_expr->set_stmt(unique_ptr<SelectStmt>(static_cast<SelectStmt *>(stmt)));
+      }
+      if (condition.right_expr != nullptr && condition.right_expr->type() == ExprType::SUB_QUERY) {
+        SubqueryExpr *subquery_expr = static_cast<SubqueryExpr *>(condition.right_expr.get());
+        Stmt         *stmt          = nullptr;
+        RC            rc            = SelectStmt::create(
+            db, subquery_expr->sub_query_sn()->selection, stmt, name2alias, alias2name, loaded_relation_names);
+        if (rc != RC::SUCCESS) {
+          LOG_WARN("cannot construct subquery stmt");
+          return rc;
+        }
+        // 检查子查询的合法性：子查询的查询的属性只能有一个,行数可以无限
+        RC rc_ = subquery_expr->check_sub_select_legal(db);
+        if (rc_ != RC::SUCCESS) {
+          return rc_;
+        }
+        subquery_expr->set_stmt(unique_ptr<SelectStmt>(static_cast<SelectStmt *>(stmt)));
+      }
     }
   }
 

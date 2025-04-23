@@ -115,6 +115,8 @@ UnboundAggregateExpr *create_aggregate_expression(const char *aggregate_name,
         AND
         SET
         ON
+        IN
+        EXISTS
         LOAD
         DATA
         INFILE
@@ -173,6 +175,7 @@ UnboundAggregateExpr *create_aggregate_expression(const char *aggregate_name,
 %type <relation>             relation
 %type <cstring>             alias
 %type <comp>                comp_op
+%type <comp>                exists_op
 %type <rel_attr>            rel_attr
 %type <attr_infos>          attr_def_list
 %type <attr_info>           attr_def
@@ -186,6 +189,7 @@ UnboundAggregateExpr *create_aggregate_expression(const char *aggregate_name,
 %type <expression>          sys_func
 %type <expression_list>     expression_list
 %type <expression_list>     group_by
+%type <expression>          sub_query_expr
 %type <sql_node>            calc_stmt
 %type <sql_node>            select_stmt
 %type <sql_node>            insert_stmt
@@ -620,6 +624,8 @@ expression_list:
       context->remove_object($1);
     }
     ;
+  
+// 目前表达式不允许空
 expression:
     expression '+' expression {
       $$ = create_arithmetic_expression(ArithmeticExpr::Type::ADD, $1, $3, sql_string, &@$, context);
@@ -648,6 +654,12 @@ expression:
       context->remove_object($1);
       delete $1;
     }
+    | LBRACE value value_list RBRACE  {
+      std::vector<Value> *values = $3;
+      values->emplace_back(*$2);
+      $$ = new ValueListExpr(*values);
+      $$->set_name(token_name(sql_string, &@$));
+    }
     | rel_attr {
       RelAttrSqlNode *node = $1;
       if (node->attribute_name == "*" && node->relation_name != "") {
@@ -671,6 +683,9 @@ expression:
       $$ = $1;
     }
     | sys_func {
+      $$ = $1;
+    }
+    | sub_query_expr {
       $$ = $1;
     }
     // your code here
@@ -714,6 +729,14 @@ sys_func:
     context->remove_object($3);
   }
   ;
+
+sub_query_expr:
+    LBRACE select_stmt RBRACE {
+      $$ = new SubqueryExpr($2);
+      context->add_object($$);
+      $$->set_name(token_name(sql_string, &@$));
+    }
+    ;
 
 alias:
     /* empty */
@@ -826,9 +849,21 @@ condition:
     {
       $$ = new ConditionSqlNode;
       context->add_object($$);
+      context->remove_object($1);
+      context->remove_object($3);
       $$->comp_op = $2;
       $$->left_expr = unique_ptr<Expression>($1);
       $$->right_expr = unique_ptr<Expression>($3);  
+    }
+    | exists_op expression
+    {
+      $$ = new ConditionSqlNode;
+      context->add_object($$);
+      context->remove_object($2);
+      $$->comp_op = $1;
+      // 后续需要判断是否为nullptr
+      $$->left_expr = nullptr;
+      $$->right_expr = unique_ptr<Expression>($2);
     }
     ;
 
@@ -843,8 +878,14 @@ comp_op:
     | IS_TOKEN NOT { $$ = IS_NOT; }
     | LIKE {$$ = LIKE_OP;}
     | NOT LIKE {$$ = NOT_LIKE_OP; }
+    | IN { $$ = IN_OP; }
+    | NOT IN { $$ = NOT_IN_OP; }
     ;
 
+exists_op:
+    EXISTS { $$ = EXISTS_OP; }
+    | NOT EXISTS { $$ = NOT_EXISTS_OP; }
+    ;
 // your code here
 group_by:
     /* empty */
