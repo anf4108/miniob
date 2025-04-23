@@ -74,7 +74,8 @@ RC ExpressionIterator::iterate_child_expr(Expression &expr, function<RC(unique_p
         }
       }
     } break;
-
+    case ExprType::VALUES:
+    case ExprType::SUB_QUERY:
     case ExprType::NONE:
     case ExprType::STAR:
     case ExprType::UNBOUND_FIELD:

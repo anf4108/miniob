@@ -363,10 +363,10 @@ RC ComparisonExpr::get_value(const Tuple &tuple, Value &value) const
 
     // 关闭算子
     // // 可优化 static_cast 潜在的开销
-    // if (subquery_expr->physical_operator() != nullptr) {
-    //   if (subquery_expr->close_physical_operator() != RC::SUCCESS)
-    //     LOG_WARN("failed to close physical operator.");
-    // }
+    if (subquery_expr->physical_operator() != nullptr) {
+      if (subquery_expr->close_physical_operator() != RC::SUCCESS)
+        LOG_WARN("failed to close physical operator.");
+    }
   }
   // value in value_list
   else if (left_->type() == ExprType::VALUES || right_->type() == ExprType::VALUES) {
