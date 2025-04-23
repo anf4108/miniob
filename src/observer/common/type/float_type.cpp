@@ -85,3 +85,21 @@ RC FloatType::to_string(const Value &val, string &result) const
   result = ss.str();
   return RC::SUCCESS;
 }
+
+RC FloatType::cast_to(const Value &val, AttrType type, Value &result) const
+{
+  switch (type) {
+    case AttrType::INTS: {
+      // round 四舍五入
+      int to = val.value_.float_value_ > 0 ? int(val.value_.float_value_ + 0.5) : int(val.value_.float_value_ - 0.5);
+      result.set_int(to);
+      break;
+    }
+    case AttrType::CHARS: {
+      std::string to = common::double_to_str(val.value_.float_value_);
+      break;
+    }
+    default: return RC::UNIMPLEMENTED;
+  }
+  return RC::SUCCESS;
+}

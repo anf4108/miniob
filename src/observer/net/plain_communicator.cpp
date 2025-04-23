@@ -252,6 +252,7 @@ RC PlainCommunicator::write_result_internal(SessionEvent *event, bool &need_disc
   }
 
   if (rc == RC::INVALID_ARGUMENT) {
+    // important
     sql_result->close();
     event->sql_result()->set_return_code(rc);
     // 应该输出Failure状态
@@ -341,9 +342,11 @@ RC PlainCommunicator::write_tuple_result(SqlResult *sql_result)
         sql_result->close();
         return rc;
       }
-
       string cell_str = value.to_string();
-
+      // shit code here
+      if (sql_result->get_operator()->name() != "CALC" && value.is_null() && value.length() != 0) {
+        cell_str = "NULL";
+      }
       rc = writer_->writen(cell_str.data(), cell_str.size());
       if (OB_FAIL(rc)) {
         LOG_WARN("failed to send data to client. err=%s", strerror(errno));
