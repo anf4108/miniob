@@ -113,6 +113,7 @@ UnboundAggregateExpr *create_aggregate_expression(const char *aggregate_name,
         FROM
         WHERE
         AND
+        OR
         SET
         ON
         IN
@@ -838,6 +839,18 @@ condition_list:
         context->add_object($$);
       }
       $1->conjunction_type = ConjunctionType::CONJ_AND;
+      $$->insert($$->begin(), std::move(*$1));
+      // $$->emplace_back(std::move(*$1));
+      context->remove_object($1);
+      delete $1;
+    }
+    | condition OR condition_list {
+      $$ = $3;
+      if ($$ == nullptr) {
+        $$ = new vector<ConditionSqlNode>;
+        context->add_object($$);
+      }
+      $1->conjunction_type = ConjunctionType::CONJ_OR;
       $$->insert($$->begin(), std::move(*$1));
       // $$->emplace_back(std::move(*$1));
       context->remove_object($1);

@@ -37,13 +37,15 @@ public:
   virtual ~FilterStmt();
 
 public:
-  vector<unique_ptr<Expression>> &conditions() { return conditions_; }
+  vector<unique_ptr<Expression>>       &conditions() { return conditions_; }
+  const vector<unique_ptr<Expression>> &conditions() const { return conditions_; }
+  vector<char>                         &conjunction_types() { return conjunction_types_; }
 
 public:
   static RC create(Db *db, Table *default_table, std::unordered_map<std::string, Table *> *tables,
       std::vector<ConditionSqlNode> &conditions, FilterStmt *&stmt);
 
 private:
-  vector<unique_ptr<Expression>> conditions_;         // 目前支持AND
-  vector<char>                   conjunction_types_;  // 发现复杂子查询中需要支持 AND or OR, 后续扩展
+  vector<unique_ptr<Expression>> conditions_;
+  vector<char>                   conjunction_types_;  // 发现复杂子查询中需要支持 AND or OR, 现在进行扩展
 };

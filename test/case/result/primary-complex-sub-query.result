@@ -72,6 +72,12 @@ select * from csq_1 where (select max(csq_2.feat2) from csq_2) > feat1 and (sele
 1 | 4 | 11.2
 ID | COL1 | FEAT1
 
+select * from csq_1 where (select max(csq_2.feat2) from csq_2) > feat1 or (select min(csq_3.col3) from csq_3) < col1;
+1 | 4 | 11.2
+2 | 2 | 12
+3 | 3 | 13.5
+ID | COL1 | FEAT1
+
 select * from csq_1 where feat1 <> (select avg(csq_2.feat2) from csq_2 where csq_2.feat2 > csq_1.feat1);
 1 | 4 | 11.2
 2 | 2 | 12

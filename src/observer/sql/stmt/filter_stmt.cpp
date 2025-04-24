@@ -36,6 +36,7 @@ RC FilterStmt::create(Db *db, Table *default_table, std::unordered_map<std::stri
     std::vector<ConditionSqlNode> &conditions, FilterStmt *&stmt)
 {
   // ConditionSqlNode --> ComparisionExpr --> ConjuctionExpr(默认都是AND) --> bindExpression
+  // 现在将ConjuctionExpr进行扩展支持AND,OR
   stmt = nullptr;
   vector<unique_ptr<Expression>> bound_conditions;
   vector<unique_ptr<Expression>> conditions_exprs;
@@ -83,8 +84,11 @@ RC FilterStmt::create(Db *db, Table *default_table, std::unordered_map<std::stri
       }
     }
   }
-
+  
+  size_t i = 0;
   for (auto &condition : conditions_exprs) {
+    tmp_stmt->conjunction_types_.push_back(conditions[i].conjunction_type);
+    i++;
     RC rc = expression_binder.bind_expression(condition, bound_conditions);
     if (rc != RC::SUCCESS) {
       delete tmp_stmt;
