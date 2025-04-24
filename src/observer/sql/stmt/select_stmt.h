@@ -37,8 +37,9 @@ public:
 
 public:
   static RC create(Db *db, SelectSqlNode &select_sql, Stmt *&stmt,
-      std::shared_ptr<std::unordered_map<string, string>> name2alias = nullptr,
-      std::shared_ptr<std::unordered_map<string, string>> alias2name = nullptr);
+      std::shared_ptr<std::unordered_map<string, string>> name2alias            = nullptr,
+      std::shared_ptr<std::unordered_map<string, string>> alias2name            = nullptr,
+      std::shared_ptr<std::vector<string>>                loaded_relation_names = nullptr);
 
   /// 用于实际执行时，转换表达式中的别名为表名，检索storage中的字段
   static RC convert_alias_to_name(Expression *expr, std::shared_ptr<std::unordered_map<string, string>> alias2name);

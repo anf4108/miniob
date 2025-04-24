@@ -84,6 +84,8 @@ RC OptimizeStage::generate_physical_plan(
   } else {
     LOG_INFO("use tuple iterator");
     session->set_used_chunk_mode(false);
+    // 得到最上层logical operator的相关类型
+    LOG_DEBUG("logical operator type=%d", logical_operator->type());
     rc = physical_plan_generator_.create(*logical_operator, physical_operator);
   }
   if (rc != RC::SUCCESS) {

@@ -91,7 +91,6 @@ RC ExpressionBinder::bind_expression(unique_ptr<Expression> &expr, vector<unique
     } break;
 
     case ExprType::AGGREGATION: {
-      // ASSERT(false, "shouldn't be here");
       return bind_aggregate_expression(expr, bound_expressions);
     } break;
 
@@ -103,12 +102,41 @@ RC ExpressionBinder::bind_expression(unique_ptr<Expression> &expr, vector<unique
       return bind_like_expression(expr, bound_expressions);
     } break;
 
+    case ExprType::VALUES: {
+      return bind_values_expression(expr, bound_expressions);
+    } break;
+
+    case ExprType::SUB_QUERY: {
+      return bind_subquery_expression(expr, bound_expressions);
+    } break;
+
     default: {
       LOG_WARN("unknown expression type: %d", static_cast<int>(expr->type()));
       return RC::INTERNAL;
     }
   }
   return RC::INTERNAL;
+}
+
+RC ExpressionBinder::bind_values_expression(
+    unique_ptr<Expression> &values_expr, vector<unique_ptr<Expression>> &bound_expressions)
+{
+  if (nullptr == values_expr) {
+    return RC::SUCCESS;
+  }
+  // 常量列表表达式直接bound
+  bound_expressions.emplace_back(std::move(values_expr));
+  return RC::SUCCESS;
+}
+
+RC ExpressionBinder::bind_subquery_expression(
+    unique_ptr<Expression> &sub_query_expr, vector<unique_ptr<Expression>> &bound_expressions)
+{
+  if (nullptr == sub_query_expr) {
+    return RC::SUCCESS;
+  }
+  bound_expressions.emplace_back(std::move(sub_query_expr));
+  return RC::SUCCESS;
 }
 
 RC ExpressionBinder::bind_star_expression(
@@ -153,17 +181,32 @@ RC ExpressionBinder::bind_unbound_field_expression(
   auto unbound_field_expr = static_cast<UnboundFieldExpr *>(expr.get());
 
   const char *table_name = unbound_field_expr->table_name();
-  LOG_DEBUG("unbound field expression's table name: %s", table_name);
+  if (!is_blank(table_name)) {
+    LOG_DEBUG("unbound field expression's table name: %s", table_name);
+  }
+  // 处理表名为空的情况
+  LOG_DEBUG("unbound field expression's field name: %s", unbound_field_expr->field_name());
   const char *field_name = unbound_field_expr->field_name();
   const char *alias      = unbound_field_expr->alias_c_str();
   Table      *table      = nullptr;
   if (is_blank(table_name)) {
-    if (context_.query_tables().size() != 1) {
-      LOG_INFO("cannot determine table for field: %s", field_name);
-      return RC::SCHEMA_TABLE_NOT_EXIST;
+    // 考虑子查询引入的表
+    // SELECT * from tb where id in (select value from tb2 where value > 1)
+    bool found = false;
+    for (Table *table_ : context_.query_tables()) {
+      if (table_->table_meta().field(field_name) != nullptr) {
+        if (found) {
+          LOG_INFO("ambiguous field name: %s, cannot determine table for this field.", field_name);
+          return RC::INVALID_ARGUMENT;
+        }
+        found = true;
+        table = table_;
+      }
     }
-    table_name = nullptr;
-    table      = context_.query_tables()[0];
+    if (!found) {
+      LOG_INFO("no such field in from list: %s", field_name);
+      return RC::SCHEMA_FIELD_MISSING;
+    }
   } else {
     table = context_.find_table(table_name);
     if (nullptr == table) {
@@ -258,23 +301,25 @@ RC ExpressionBinder::bind_comparison_expression(
   vector<unique_ptr<Expression>> child_bound_expressions;
   unique_ptr<Expression>        &left_expr  = comparison_expr->left();
   unique_ptr<Expression>        &right_expr = comparison_expr->right();
+  RC                             rc;
 
-  // LOG_DEBUG("start to bind comparison expression: %s", expr->name());
-  RC rc = bind_expression(left_expr, child_bound_expressions);
-  if (rc != RC::SUCCESS) {
-    return rc;
+  // consider the case that the left expression is null, so we are dealing with exists case
+  if (left_expr != nullptr) {
+    rc = bind_expression(left_expr, child_bound_expressions);
+    if (rc != RC::SUCCESS) {
+      return rc;
+    }
+
+    if (child_bound_expressions.size() != 1) {
+      LOG_WARN("invalid left children number of comparison expression: %d", child_bound_expressions.size());
+      return RC::INVALID_ARGUMENT;
+    }
+
+    unique_ptr<Expression> &left = child_bound_expressions[0];
+    if (left.get() != left_expr.get()) {
+      left_expr.reset(left.release());
+    }
   }
-
-  if (child_bound_expressions.size() != 1) {
-    LOG_WARN("invalid left children number of comparison expression: %d", child_bound_expressions.size());
-    return RC::INVALID_ARGUMENT;
-  }
-
-  unique_ptr<Expression> &left = child_bound_expressions[0];
-  if (left.get() != left_expr.get()) {
-    left_expr.reset(left.release());
-  }
-
   // LOG_DEBUG("having bound left comparison expression: %s", left_expr->name());
 
   child_bound_expressions.clear();

@@ -44,7 +44,7 @@ public:
   const TupleSchema &tuple_schema() const { return tuple_schema_; }
   RC                 return_code() const { return return_code_; }
   const string      &state_string() const { return state_string_; }
-
+  const PhysicalOperator *get_operator() const { return operator_.get(); }
   RC open();
   RC close();
   RC next_tuple(Tuple *&tuple);
