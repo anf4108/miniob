@@ -560,7 +560,7 @@ select_stmt:        /*  select 语句的语法解析树*/
         delete $2;
       }
     }
-    | SELECT expression_list FROM rel_list where group_by
+    | SELECT expression_list FROM rel_list join_list where group_by
     {
       LOG_DEBUG("DEBUG: select_stmt");
       $$ = new ParsedSqlNode(SCF_SELECT);
@@ -575,18 +575,28 @@ select_stmt:        /*  select 语句的语法解析树*/
         delete $4;
       }
       // join
+      if ($5 != nullptr) {
+        for (auto &join : *$5) {
+          $$->selection.relations.push_back(join.relation);
+          for (auto &condition : join.conditions) {
+            $$->selection.conditions.emplace_back(std::move(condition));
+          }
+        }
+      }
 
       // where
-      if ($5 != nullptr) {
-        $$->selection.conditions.swap(*$5);
+      if ($6 != nullptr) {
+        for (auto &condition : *$6) {
+          $$->selection.conditions.emplace_back(std::move(condition));
+        }
         // 不需要进行倒置
-        delete $5;
+        delete $6;
       }
 
       // group by
-      if ($6 != nullptr) {
-        $$->selection.group_by.swap(*$6);
-        delete $6;
+      if ($7 != nullptr) {
+        $$->selection.group_by.swap(*$7);
+        delete $7;
       }
     }
     ;
@@ -829,12 +839,12 @@ join_list:
       JoinSqlNode join1;
       join1.relation = *$2;
       delete $2;
-      // reverse
-      std::reverse($4->begin(), $4->end());
-      for (auto &condition : *$4) {
-        join1.conditions.emplace_back(std::move(condition));
+      if ($4 != nullptr) {
+        join1.conditions.swap(*$4);
+        delete $4;
       }
-      $$->emplace_back(std::move(join1));
+      $$->insert($$->begin(), std::move(join1));
+      
     }
     ;
 
