@@ -3,6 +3,8 @@
 #include "common/sys/rc.h"
 #include "sql/expr/tuple.h"
 #include "common/value.h"
+#include "storage/field/field_meta.h"
+#include "common/type/attr_type.h"
 #include <cstring>
 
 RC UpdatePhysicalOperator::next() {
@@ -121,16 +123,16 @@ RC UpdatePhysicalOperator::update(vector<char> v, RID &rid) {
   int offset = meta->offset();
   int field_len = meta->len();
   
-  // 检查边界
-  if (offset < 0 || offset + field_len > v.size()) {
-    LOG_ERROR("Invalid field offset or length. offset=%d, len=%d, record_size=%zu", 
-              offset, field_len, v.size());
+  if (value_.length() > field_len) {
+    LOG_ERROR("Data too long for column %s", meta->name());
     return RC::INVALID_ARGUMENT;
+  } else if (value_.length() < field_len) {
+    memcpy(v.data() + offset, value_.data(), value_.length());
+    v.data()[offset + value_.length()] = '\0';
+  } else {
+    memcpy(v.data() + offset, value_.data(), field_len);
   }
   
-  int len = min(field_len, value_.length());
-  
-  memcpy(v.data() + offset, value_.data(), len);
   return insert(v, rid);
 }
 
