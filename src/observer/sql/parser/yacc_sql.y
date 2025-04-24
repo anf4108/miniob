@@ -94,6 +94,7 @@ UnboundAggregateExpr *create_aggregate_expression(const char *aggregate_name,
         UPDATE
         LBRACE
         RBRACE
+        INNER_JOIN
         COMMA
         TRX_BEGIN
         TRX_COMMIT
@@ -154,6 +155,7 @@ UnboundAggregateExpr *create_aggregate_expression(const char *aggregate_name,
   vector<ConditionSqlNode> *            condition_list;
   vector<RelAttrSqlNode> *              rel_attr_list;
   vector<RelationSqlNode> *                 relation_list;
+  vector<JoinSqlNode> *                 join_list;
   char *                                     cstring;
   int                                        number;
   float                                      floats;
@@ -183,6 +185,7 @@ UnboundAggregateExpr *create_aggregate_expression(const char *aggregate_name,
 %type <value_list>          value_list
 %type <condition_list>      where
 %type <condition_list>      condition_list
+%type <join_list>           join_list
 %type <cstring>             storage_format
 %type <relation_list>       rel_list
 %type <expression>          expression
@@ -571,14 +574,16 @@ select_stmt:        /*  select 语句的语法解析树*/
         $$->selection.relations.swap(*$4);
         delete $4;
       }
+      // join
 
+      // where
       if ($5 != nullptr) {
         $$->selection.conditions.swap(*$5);
-        // 左递归，需要倒置
-        reverse($$->selection.conditions.begin(), $$->selection.conditions.end());
+        // 不需要进行倒置
         delete $5;
       }
 
+      // group by
       if ($6 != nullptr) {
         $$->selection.group_by.swap(*$6);
         delete $6;
@@ -806,6 +811,30 @@ rel_list:
       // $$->insert($$->begin(), $1);
       context->remove_object($1);
       delete $1;
+    }
+    ;
+
+join_list:
+    /* empty */
+    {
+      $$ = nullptr;
+    }
+    | INNER_JOIN relation ON condition_list join_list {
+      if ($5 != nullptr) {
+        $$ = $5;
+      } else {
+        $$ = new std::vector<JoinSqlNode>;
+      }
+
+      JoinSqlNode join1;
+      join1.relation = *$2;
+      delete $2;
+      // reverse
+      std::reverse($4->begin(), $4->end());
+      for (auto &condition : *$4) {
+        join1.conditions.emplace_back(std::move(condition));
+      }
+      $$->emplace_back(std::move(join1));
     }
     ;
 

@@ -151,6 +151,17 @@ struct SelectSqlNode
 };
 
 /**
+ * @brief 描述一个join语句
+ * @ingroup SQLParser
+ * @details join语句的条件是用纯AND或者纯OR连接起来的。
+ */
+struct JoinSqlNode
+{
+  RelationSqlNode relation;  ///< Relation to join with
+  std::vector<ConditionSqlNode> conditions;
+};
+
+/**
  * @brief 算术表达式计算的语法树
  * @ingroup SQLParser
  */
