@@ -16,7 +16,7 @@ See the Mulan PSL v2 for more details. */
 int CharType::compare(const Value &left, const Value &right) const
 {
   // for char and float cast test case
-  if (left.attr_type() == AttrType::CHARS && right.attr_type() == AttrType::FLOATS) {
+  if (left.attr_type() == AttrType::CHARS && (right.attr_type() == AttrType::FLOATS || right.attr_type() == AttrType::INTS)) {
     float left_val  = left.get_float();
     float right_val = right.get_float();
     return common::compare_float((void *)&left_val, (void *)&right_val);
