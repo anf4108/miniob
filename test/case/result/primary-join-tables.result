@@ -62,6 +62,22 @@ select * from join_table_empty_1 inner join join_table_1 on join_table_empty_1.i
 JOIN_TABLE_EMPTY_1.ID | JOIN_TABLE_EMPTY_1.NUM_EMPTY_1 | JOIN_TABLE_1.ID | JOIN_TABLE_1.NAME | JOIN_TABLE_2.ID | JOIN_TABLE_2.NUM
 
 4. VERY LARGE JOIN
+create table join_table_1_1(id int, name char(20));
+SUCCESS
+create table join_table_4_4(id int, col float);
+SUCCESS
+insert into join_table_1_1 values(4, '16a');
+SUCCESS
+insert into join_table_4_4 values(1, 16.5);
+SUCCESS
+insert into join_table_4_4 values(2, 17.5);
+SUCCESS
+insert into join_table_4_4 values(5, 13.5);
+SUCCESS
+select * from join_table_4_4 inner join join_table_1_1 on join_table_1_1.name > join_table_4_4.col and join_table_1_1.id < join_table_4_4.id;
+5 | 13.5 | 4 | 16A
+JOIN_TABLE_4_4.ID | JOIN_TABLE_4_4.COL | JOIN_TABLE_1_1.ID | JOIN_TABLE_1_1.NAME
+
 create table join_table_large_1(id int, num1 int);
 SUCCESS
 create table join_table_large_2(id int, num2 int);
@@ -1374,18 +1390,3 @@ select * from join_table_large_1 inner join join_table_large_2 on join_table_lar
 9 | 9 | 9 | 9 | 9 | 9 | 9 | 9 | 99 | 99 | 99 | 99
 JOIN_TABLE_LARGE_1.ID | JOIN_TABLE_LARGE_1.NUM1 | JOIN_TABLE_LARGE_2.ID | JOIN_TABLE_LARGE_2.NUM2 | JOIN_TABLE_LARGE_3.ID | JOIN_TABLE_LARGE_3.NUM3 | JOIN_TABLE_LARGE_4.ID | JOIN_TABLE_LARGE_4.NUM4 | JOIN_TABLE_LARGE_5.ID | JOIN_TABLE_LARGE_5.NUM5 | JOIN_TABLE_LARGE_6.ID | JOIN_TABLE_LARGE_6.NUM6
 
-create table join_table_1_1(id int, name char(20));
-SUCCESS
-create table join_table_4_4(id int, col float);
-SUCCESS
-insert into join_table_1_1 values(4, '16a');
-SUCCESS
-insert into join_table_4_4 values(1, 16.5);
-SUCCESS
-insert into join_table_4_4 values(2, 17.5);
-SUCCESS
-insert into join_table_4_4 values(5, 13.5);
-SUCCESS
-select * from join_table_4_4 inner join join_table_1_1 on join_table_1_1.name > join_table_4_4.col and join_table_1_1.id < join_table_4_4.id;
-5 | 13.5 | 4 | 16A
-JOIN_TABLE_4_4.ID | JOIN_TABLE_4_4.COL | JOIN_TABLE_1_1.ID | JOIN_TABLE_1_1.NAME
