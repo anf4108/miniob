@@ -187,7 +187,7 @@ RC LogicalPlanGenerator::create_plan(FilterStmt *filter_stmt, unique_ptr<Logical
           // 右子树是子查询
           auto sub_query_expr = static_cast<SubqueryExpr *>(cmp_expr_->right().get());
           LOG_DEBUG("the subquery expression is %s", sub_query_expr->name());
-          auto sub_query_stmt = static_cast<SelectStmt *>(sub_query_expr->stmt().get());
+          auto                        sub_query_stmt = static_cast<SelectStmt *>(sub_query_expr->stmt().get());
           unique_ptr<LogicalOperator> sub_query_oper;
           rc = create_plan(sub_query_stmt, sub_query_oper);
           if (rc != RC::SUCCESS) {
@@ -217,9 +217,10 @@ RC LogicalPlanGenerator::create_plan(FilterStmt *filter_stmt, unique_ptr<Logical
 
   if (!cmp_exprs.empty()) {
     ConjunctionExpr::Type conjunction_type = ConjunctionExpr::Type::AND;
-    if (filter_stmt->conjunction_types().size() > 0 && filter_stmt->conjunction_types()[0] == ConjunctionType::CONJ_OR) {
+    if (filter_stmt->conjunction_types().size() > 1 &&
+        filter_stmt->conjunction_types()[1] == ConjunctionType::CONJ_OR) {
       conjunction_type = ConjunctionExpr::Type::OR;
-    } 
+    }
     unique_ptr<ConjunctionExpr> conjunction_expr(new ConjunctionExpr(conjunction_type, cmp_exprs));
     logical_operator = unique_ptr<LogicalOperator>(new PredicateLogicalOperator(std::move(conjunction_expr)));
   }
@@ -367,12 +368,12 @@ RC LogicalPlanGenerator::create_group_by_plan(SelectStmt *select_stmt, unique_pt
 
 RC LogicalPlanGenerator::create_plan(UpdateStmt *update_stmt, unique_ptr<LogicalOperator> &logical_operator)
 {
-  Table *table = update_stmt->table();
+  Table                      *table = update_stmt->table();
   unique_ptr<LogicalOperator> table_get_oper(new TableGetLogicalOperator(table, ReadWriteMode::READ_WRITE));
-  auto *filter_stmt = update_stmt->filter_stmt();
+  auto                       *filter_stmt = update_stmt->filter_stmt();
   if (filter_stmt != nullptr) {
     unique_ptr<LogicalOperator> predicate_oper;
-    RC rc = create_plan(filter_stmt, predicate_oper);
+    RC                          rc = create_plan(filter_stmt, predicate_oper);
     if (rc != RC::SUCCESS) {
       return rc;
     }
