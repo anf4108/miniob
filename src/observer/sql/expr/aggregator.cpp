@@ -88,6 +88,7 @@ RC AvgAggregator::evaluate(Value &result)
 
 RC CountAggregator::accumulate(const Value &value)
 {
+  LOG_DEBUG("count is %ld", count_);
   if (value.is_null()) {
     return RC::SUCCESS;
   }

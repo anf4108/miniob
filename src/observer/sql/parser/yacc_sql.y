@@ -715,6 +715,7 @@ aggregate_func:
         context->clear_object($3);  // 清除 $3 中的对象
         $$ = create_aggregate_expression("MAX", star, sql_string, &@$, context);
       } else {
+        LOG_DEBUG("DEBUG: reduce aggregate_func");
         Expression *child = $3->at(0).release();  // 转移所有权
         context->remove_object(child);  // 从 context 中移除，因为它现在由 create_aggregate_expression 管理
         context->clear_object($3);  // 清除 $3 中的对象
