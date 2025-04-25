@@ -110,7 +110,7 @@ RC PredicatePushdownRewriter::get_exprs_can_pushdown(
       }
 
       if (!*iter) {
-        child_exprs.erase(iter);
+        iter = child_exprs.erase(iter);
       } else {
         ++iter;
       }

@@ -98,7 +98,9 @@ RC ProjectPhysicalOperator::tuple_schema(TupleSchema &schema) const
       // 如果是字段表达式，获取表名和字段名，拼接成 "table_name.field_name"
       FieldExpr  *field_expr = static_cast<FieldExpr *>(expression.get());
       std::string field_name = field_expr->field_name();
-      if (field_expr->try_get_table_name_in_multi_table_query() != nullptr) {
+      // table name作为const char*存在，判断不为空指针且不为空字符串
+      if (field_expr->try_get_table_name_in_multi_table_query() != nullptr &&
+          strlen(field_expr->try_get_table_name_in_multi_table_query()) > 0) {
         std::string table_name = field_expr->try_get_table_name_in_multi_table_query();
         column_name            = table_name + "." + field_name;
       } else {

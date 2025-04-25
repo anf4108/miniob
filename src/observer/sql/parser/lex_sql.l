@@ -132,6 +132,7 @@ FORMAT                                  RETURN_TOKEN(FORMAT);
 LENGTH                                  RETURN_TOKEN(SYS_LENGTH);
 ROUND                                   RETURN_TOKEN(SYS_ROUND);
 DATE_FORMAT                             RETURN_TOKEN(SYS_DATE_FORMAT);
+"INNER JOIN"                            RETURN_TOKEN(INNER_JOIN);
 {ID}                                    yylval->cstring=strdup(yytext); static_cast<std::vector<char*>*>(yyextra)->push_back(yylval->cstring);LOG_DEBUG("%s", yytext); RETURN_TOKEN(ID); 
 "("                                     RETURN_TOKEN(LBRACE); LOG_DEBUG("LBRACE");
 ")"                                     RETURN_TOKEN(RBRACE); LOG_DEBUG("RBRACE");

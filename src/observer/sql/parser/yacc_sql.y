@@ -94,6 +94,7 @@ UnboundAggregateExpr *create_aggregate_expression(const char *aggregate_name,
         UPDATE
         LBRACE
         RBRACE
+        INNER_JOIN
         COMMA
         TRX_BEGIN
         TRX_COMMIT
@@ -154,6 +155,7 @@ UnboundAggregateExpr *create_aggregate_expression(const char *aggregate_name,
   vector<ConditionSqlNode> *            condition_list;
   vector<RelAttrSqlNode> *              rel_attr_list;
   vector<RelationSqlNode> *                 relation_list;
+  vector<JoinSqlNode> *                 join_list;
   char *                                     cstring;
   int                                        number;
   float                                      floats;
@@ -183,6 +185,7 @@ UnboundAggregateExpr *create_aggregate_expression(const char *aggregate_name,
 %type <value_list>          value_list
 %type <condition_list>      where
 %type <condition_list>      condition_list
+%type <join_list>           join_list
 %type <cstring>             storage_format
 %type <relation_list>       rel_list
 %type <expression>          expression
@@ -557,7 +560,7 @@ select_stmt:        /*  select 语句的语法解析树*/
         delete $2;
       }
     }
-    | SELECT expression_list FROM rel_list where group_by
+    | SELECT expression_list FROM rel_list join_list where group_by
     {
       LOG_DEBUG("DEBUG: select_stmt");
       $$ = new ParsedSqlNode(SCF_SELECT);
@@ -571,17 +574,29 @@ select_stmt:        /*  select 语句的语法解析树*/
         $$->selection.relations.swap(*$4);
         delete $4;
       }
-
+      // join
       if ($5 != nullptr) {
-        $$->selection.conditions.swap(*$5);
-        // 左递归，需要倒置
-        reverse($$->selection.conditions.begin(), $$->selection.conditions.end());
-        delete $5;
+        for (auto &join : *$5) {
+          $$->selection.relations.push_back(join.relation);
+          for (auto &condition : join.conditions) {
+            $$->selection.conditions.emplace_back(std::move(condition));
+          }
+        }
       }
 
+      // where
       if ($6 != nullptr) {
-        $$->selection.group_by.swap(*$6);
+        for (auto &condition : *$6) {
+          $$->selection.conditions.emplace_back(std::move(condition));
+        }
+        // 不需要进行倒置
         delete $6;
+      }
+
+      // group by
+      if ($7 != nullptr) {
+        $$->selection.group_by.swap(*$7);
+        delete $7;
       }
     }
     ;
@@ -700,6 +715,7 @@ aggregate_func:
         context->clear_object($3);  // 清除 $3 中的对象
         $$ = create_aggregate_expression("MAX", star, sql_string, &@$, context);
       } else {
+        LOG_DEBUG("DEBUG: reduce aggregate_func");
         Expression *child = $3->at(0).release();  // 转移所有权
         context->remove_object(child);  // 从 context 中移除，因为它现在由 create_aggregate_expression 管理
         context->clear_object($3);  // 清除 $3 中的对象
@@ -806,6 +822,30 @@ rel_list:
       // $$->insert($$->begin(), $1);
       context->remove_object($1);
       delete $1;
+    }
+    ;
+
+join_list:
+    /* empty */
+    {
+      $$ = nullptr;
+    }
+    | INNER_JOIN relation ON condition_list join_list {
+      if ($5 != nullptr) {
+        $$ = $5;
+      } else {
+        $$ = new std::vector<JoinSqlNode>;
+      }
+
+      JoinSqlNode join1;
+      join1.relation = *$2;
+      delete $2;
+      if ($4 != nullptr) {
+        join1.conditions.swap(*$4);
+        delete $4;
+      }
+      $$->insert($$->begin(), std::move(join1));
+      
     }
     ;
 

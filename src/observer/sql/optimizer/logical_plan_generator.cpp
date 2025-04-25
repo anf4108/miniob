@@ -218,7 +218,7 @@ RC LogicalPlanGenerator::create_plan(FilterStmt *filter_stmt, unique_ptr<Logical
   if (!cmp_exprs.empty()) {
     ConjunctionExpr::Type conjunction_type = ConjunctionExpr::Type::AND;
     if (filter_stmt->conjunction_types().size() > 1 &&
-        filter_stmt->conjunction_types()[1] == ConjunctionType::CONJ_OR) {
+        filter_stmt->conjunction_types()[0] == ConjunctionType::CONJ_OR) {
       conjunction_type = ConjunctionExpr::Type::OR;
     }
     unique_ptr<ConjunctionExpr> conjunction_expr(new ConjunctionExpr(conjunction_type, cmp_exprs));
