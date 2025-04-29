@@ -5,9 +5,11 @@
 #include "common/value.h"
 #include "storage/field/field_meta.h"
 #include "common/type/attr_type.h"
+#include "storage/record/record.h"
 #include <cstring>
 
-RC UpdatePhysicalOperator::next() {
+RC UpdatePhysicalOperator::next()
+{
   if (children_.empty()) {
     return RC::RECORD_EOF;
   }
@@ -15,19 +17,20 @@ RC UpdatePhysicalOperator::next() {
   return children_[0]->next();
 }
 
-RC UpdatePhysicalOperator::open(Trx *trx) {
+RC UpdatePhysicalOperator::open(Trx *trx)
+{
   RC rc = children_[0]->open(trx);
   if (rc != RC::SUCCESS)
     return rc;
 
-  vector<RID> to_update;
+  vector<RID>          to_update;
   vector<vector<char>> records;
-  
+
   // 1. 先收集所有需要更新的记录ID和内容
   while ((rc = children_[0]->next()) == RC::SUCCESS) {
-    auto *tuple = static_cast<RowTuple *>(children_[0]->current_tuple());
+    auto *tuple  = static_cast<RowTuple *>(children_[0]->current_tuple());
     auto &record = tuple->record();
-    
+
     // 保存记录ID和内容
     to_update.push_back(record.rid());
     vector<char> r(table_->table_meta().record_size());
@@ -37,7 +40,7 @@ RC UpdatePhysicalOperator::open(Trx *trx) {
   // 2. 释放所有读锁
   children_[0]->close();
   children_.clear();
-  
+
   if (rc != RC::RECORD_EOF) {
     return rc;
   }
@@ -69,15 +72,16 @@ RC UpdatePhysicalOperator::open(Trx *trx) {
     //   return rc;
     // }
   }
-  
+
   return RC::SUCCESS;
 }
 
-RC UpdatePhysicalOperator::insert_all(vector<vector<char>> &v) {
+RC UpdatePhysicalOperator::insert_all(vector<vector<char>> &v)
+{
   RC rc_ret = RC::SUCCESS;
   for (auto &x : v) {
     RID rid;
-    RC rc = insert(x, rid);
+    RC  rc = insert(x, rid);
     if (rc != RC::SUCCESS) {
       LOG_ERROR("fail to insert all");
       if (rc_ret == RC::SUCCESS) {
@@ -88,9 +92,10 @@ RC UpdatePhysicalOperator::insert_all(vector<vector<char>> &v) {
   return rc_ret;
 }
 
-RC UpdatePhysicalOperator::insert(vector<char> &v, RID &rid) {
+RC UpdatePhysicalOperator::insert(vector<char> &v, RID &rid)
+{
   Record record;
-  RC rc = table_->make_record(v.data(), v.size(), record);
+  RC     rc = table_->make_record(v.data(), v.size(), record);
   if (rc != RC::SUCCESS) {
     LOG_ERROR("fail to make record");
     return rc;
@@ -104,7 +109,8 @@ RC UpdatePhysicalOperator::insert(vector<char> &v, RID &rid) {
   return rc;
 }
 
-RC UpdatePhysicalOperator::remove_all(const vector<RID> &rids) {
+RC UpdatePhysicalOperator::remove_all(const vector<RID> &rids)
+{
   RC rc_ret = RC::SUCCESS;
   for (auto &rid : rids) {
     RC rc = table_->delete_record(rid);
@@ -118,24 +124,35 @@ RC UpdatePhysicalOperator::remove_all(const vector<RID> &rids) {
   return rc_ret;
 }
 
-RC UpdatePhysicalOperator::update(vector<char> v, RID &rid) {
-  const auto *meta = update_field_.meta();
-  int offset = meta->offset();
-  int field_len = meta->len();
-  
-  if (value_.length() > field_len) {
-    LOG_ERROR("Data too long for column %s", meta->name());
+RC UpdatePhysicalOperator::update(vector<char> v, RID &rid)
+{
+  const auto  *meta     = update_field_.meta();
+  size_t       copy_len = meta->len();
+  const size_t data_len = value_.length();
+  size_t       offset   = meta->offset();
+  auto bitmap = common::Bitmap(v.data() + table_->table_meta().null_bitmap_start(), table_->table_meta().field_num());
+
+  // 检查NOT NULL约束
+  if (meta->nullable() == false && value_.is_null()) {
+    LOG_ERROR("Cannot set NULL to NOT NULL column %s", meta->name());
     return RC::INVALID_ARGUMENT;
-  } else if (value_.length() < field_len) {
-    memcpy(v.data() + offset, value_.data(), value_.length());
-    v.data()[offset + value_.length()] = '\0';
-  } else {
-    memcpy(v.data() + offset, value_.data(), field_len);
   }
-  
+
+  if (meta->type() == AttrType::CHARS) {
+    if (copy_len > data_len) {
+      copy_len = data_len + 1;
+    }
+  }
+  memcpy(v.data() + offset, value_.data(), copy_len);
+
+  auto field_id = meta->field_id() - table_->table_meta().sys_field_num();
+  if (value_.is_null()) {
+    bitmap.set_bit(field_id);
+  } else {
+    bitmap.clear_bit(field_id);
+  }
+
   return insert(v, rid);
 }
 
-RC UpdatePhysicalOperator::close() {
-  return RC::SUCCESS;
-}
+RC UpdatePhysicalOperator::close() { return RC::SUCCESS; }

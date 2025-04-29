@@ -184,6 +184,18 @@ public:
     }
   }
 
+  // 添加设置 bitmap 位的方法
+  void set_bitmap_bit(int field_id, bool is_null)
+  {
+    if (bitmap_ != nullptr) {
+      if (is_null) {
+        bitmap_->set_bit(field_id);
+      } else {
+        bitmap_->clear_bit(field_id);
+      }
+    }
+  }
+
   void set_schema(const Table *table, const vector<FieldMeta> *fields)
   {
     table_ = table;
