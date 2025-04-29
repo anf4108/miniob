@@ -58,6 +58,9 @@ RC UpdatePhysicalOperator::open(Trx *trx)
     RID rid;
     rc = update(records[i], rid);
     inserted.push_back(rid);
+    if (rc != RC::SUCCESS) {
+      return rc;
+    }
     // 回滚 暂无需求
     // if (rc != RC::SUCCESS) {
     //   // 回滚已更新的记录
