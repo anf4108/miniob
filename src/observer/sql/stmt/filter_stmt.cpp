@@ -33,7 +33,7 @@ FilterStmt::~FilterStmt()
  * @brief 创建FilterStmt
  */
 RC FilterStmt::create(Db *db, Table *default_table, std::unordered_map<std::string, Table *> *tables,
-    std::vector<ConditionSqlNode> &conditions, FilterStmt *&stmt)
+    vector<ConditionSqlNode> &conditions, FilterStmt *&stmt)
 {
   // ConditionSqlNode --> ComparisionExpr --> ConjuctionExpr(默认都是AND) --> bindExpression
   stmt = nullptr;

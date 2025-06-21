@@ -879,7 +879,8 @@ def __init_options():
   realpath = os.path.realpath(__file__)
   current_path = os.path.dirname(realpath)
   if not options.work_dir:
-    options.work_dir = tempfile.gettempdir() + '/miniob'
+    # options.work_dir = tempfile.gettempdir() + '/miniob'
+    options.work_dir = os.path.join(os.path.dirname(os.path.dirname(current_path)), '')
     _logger.info('use %s as work directory', options.work_dir)
   if not options.project_dir:
     options.project_dir = os.path.realpath(current_path + '/../..')
@@ -916,12 +917,12 @@ def __init_test_suite(options) -> TestSuite:
   test_suite = TestSuite()
   test_suite.set_test_case_base_dir(os.path.abspath(options.project_dir + '/test/case/test'))
   test_suite.set_test_result_base_dir(os.path.abspath(options.project_dir + '/test/case/result'))
-  test_suite.set_test_result_tmp_dir(os.path.abspath(options.work_dir + '/result_output'))
+  test_suite.set_test_result_tmp_dir(os.path.abspath(options.work_dir + '/test/case/tmp/result_output'))
 
   test_suite.set_server_port(options.server_port)
   test_suite.set_use_unix_socket(not options.not_use_unix_socket)
   test_suite.set_db_server_base_dir(__get_build_path(options.work_dir))
-  test_suite.set_db_data_dir(options.work_dir + '/data')
+  test_suite.set_db_data_dir(options.work_dir + '/test/case/tmp/data')
   test_suite.set_db_config(os.path.abspath(options.project_dir + '/etc/observer.ini'))
 
   if options.test_cases is not None:

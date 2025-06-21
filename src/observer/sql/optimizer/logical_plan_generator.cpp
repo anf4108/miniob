@@ -187,7 +187,7 @@ RC LogicalPlanGenerator::create_plan(FilterStmt *filter_stmt, unique_ptr<Logical
           // 右子树是子查询
           auto sub_query_expr = static_cast<SubqueryExpr *>(cmp_expr_->right().get());
           LOG_DEBUG("the subquery expression is %s", sub_query_expr->name());
-          auto sub_query_stmt = static_cast<SelectStmt *>(sub_query_expr->stmt().get());
+          auto                        sub_query_stmt = static_cast<SelectStmt *>(sub_query_expr->stmt().get());
           unique_ptr<LogicalOperator> sub_query_oper;
           rc = create_plan(sub_query_stmt, sub_query_oper);
           if (rc != RC::SUCCESS) {
@@ -361,24 +361,25 @@ RC LogicalPlanGenerator::create_group_by_plan(SelectStmt *select_stmt, unique_pt
   return RC::SUCCESS;
 }
 
-RC LogicalPlanGenerator::create_plan(UpdateStmt *update_stmt, unique_ptr<LogicalOperator> &logical_operator)
+RC LogicalPlanGenerator::create_plan(UpdateStmt *update_stmt, std::unique_ptr<LogicalOperator> &logical_operator)
 {
-  Table *table = update_stmt->table();
-  unique_ptr<LogicalOperator> table_get_oper(new TableGetLogicalOperator(table, ReadWriteMode::READ_WRITE));
-  auto *filter_stmt = update_stmt->filter_stmt();
-  if (filter_stmt != nullptr) {
-    unique_ptr<LogicalOperator> predicate_oper;
-    RC rc = create_plan(filter_stmt, predicate_oper);
-    if (rc != RC::SUCCESS) {
-      return rc;
-    }
-    if (predicate_oper) {  // 确保 predicate_oper 不为空
-      predicate_oper->add_child(std::move(table_get_oper));
-      table_get_oper = std::move(predicate_oper);
-    }
+  Table                      *table = update_stmt->table();
+  unique_ptr<LogicalOperator> table_get_operator(new TableGetLogicalOperator(table, ReadWriteMode::READ_WRITE));
+
+  unique_ptr<LogicalOperator> predicate_operator;
+  RC                          rc = create_plan(update_stmt->filter_stmt(), predicate_operator);
+  if (OB_FAIL(rc)) {
+    LOG_WARN("failed to create predicate logical plan. rc=%s", strrc(rc));
+    return rc;
   }
-  auto *update_oper = new UpdateLogicalOperator(table, update_stmt->field(), update_stmt->value());
-  update_oper->add_child(std::move(table_get_oper));
-  logical_operator = unique_ptr<LogicalOperator>(update_oper);
+  logical_operator = std::make_unique<UpdateLogicalOperator>(
+      update_stmt->table(), update_stmt->field_metas(), std::move(update_stmt->exprs()));
+  // update 算子 -> select 算子 -> 扫表
+  if (predicate_operator) {
+    predicate_operator->add_child(std::move(table_get_operator));
+    logical_operator->add_child(std::move(predicate_operator));
+  } else {
+    logical_operator->add_child(std::move(table_get_operator));
+  }
   return RC::SUCCESS;
 }

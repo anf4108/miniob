@@ -9,13 +9,23 @@
             "command": "sudo -E env PATH=$PATH bash ${workspaceFolder}/build.sh init"
         },
         {
+            "label": "build",
+            "type": "shell",
+            "command": "cd build; make -j$(nproc)",
+            "problemMatcher": [],
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            }
+        },
+        {
             "label": "build_debug",
             "type": "shell",
             "command": "bash build.sh debug",
             "problemMatcher": [],
             "group": {
                 "kind": "build",
-                "isDefault": true
+                // "isDefault": true
             }
         },
         {

@@ -182,14 +182,23 @@ struct DeleteSqlNode
 };
 
 /**
+ * @brief 描述一个update语句中的更新信息
+ * @ingroup SQLParser
+ */
+struct UpdateInfoNode
+{
+  string                 attr;
+  Expression* expr;
+};
+
+/**
  * @brief 描述一个update语句
  * @ingroup SQLParser
  */
 struct UpdateSqlNode
 {
-  string                   relation_name;   ///< Relation to update
-  string                   attribute_name;  ///< 更新的字段，仅支持一个字段
-  Value                    value;           ///< 更新的值，仅支持一个字段
+  string                   relation_name;  ///< Relation to update
+  vector<UpdateInfoNode>   update_infos;   ///< 需要更新的字段
   vector<ConditionSqlNode> conditions;
 };
 
@@ -398,7 +407,7 @@ struct TypedDeleter : Deleter
  */
 struct ParseContext
 {
-  std::vector<std::pair<void *, std::unique_ptr<Deleter>>> allocated_objects;
+  vector<std::pair<void *, std::unique_ptr<Deleter>>> allocated_objects;
 
   template <typename T>
   void add_object(T *obj)

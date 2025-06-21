@@ -20,63 +20,51 @@ See the Mulan PSL v2 for more details. */
 #include "storage/db/db.h"
 #include "storage/table/table.h"
 #include "sql/expr/expression.h"
+#include "sql/parser/expression_binder.h"
 
-UpdateStmt::UpdateStmt(Table *table, Field field, Value value, FilterStmt *filter_stmt)
-    : table_(table), field_(field), value_(value), filter_stmt_(filter_stmt)
+UpdateStmt::UpdateStmt(Table *table, vector<FieldMeta> attrs, vector<unique_ptr<Expression>> exprs, FilterStmt *stmt)
+    : table_(table), field_metas_(std::move(attrs)), exprs_(std::move(exprs)), filter_stmt_(stmt)
 {}
 
 RC UpdateStmt::create(Db *db, const UpdateSqlNode &update, Stmt *&stmt)
 {
-  RC          rc         = RC::SUCCESS;
-  const char *table_name = update.relation_name.c_str();
-  if (nullptr == db || nullptr == table_name) {
-    LOG_WARN("invalid argument. db=%p, table_name=%p", db, table_name);
-    return RC::INVALID_ARGUMENT;
-  }
-
-  // check whether the table exists
-  Table *table = db->find_table(table_name);
-  if (nullptr == table) {
-    LOG_WARN("no such table. db=%s, table_name=%s", db->name(), table_name);
+  // 检查表名是否存在
+  Table *table = db->find_table(update.relation_name.c_str());
+  if (table == nullptr) {
+    LOG_WARN("table %s doesn't exit", update.relation_name.c_str());
     return RC::SCHEMA_TABLE_NOT_EXIST;
   }
 
-  const FieldMeta *field_meta;
-  field_meta = table->table_meta().field(update.attribute_name.c_str());
-  if (field_meta == nullptr) {
-    LOG_WARN("field %s not exist in table %s", update.attribute_name.c_str(), update.relation_name.c_str());
-    return RC::SCHEMA_FIELD_NOT_EXIST;
-  }
+  TableMeta     meta = table->table_meta();
+  BinderContext context;
+  context.add_table(table);
+  ExpressionBinder               binder(context);
+  vector<unique_ptr<Expression>> bound_expressions;
+  vector<FieldMeta>              field_metas;
 
-  std::unordered_map<string, Table *> table_map;
-  table_map.emplace(string(table_name), table);
+  for (const auto &[attr, expr] : update.update_infos) {
+    // 检查要更新的字段是否存在
+    auto field_meta = meta.field(attr.c_str());
+    if (field_meta == nullptr) {
+      LOG_WARN("field %s not found in table %s", attr.c_str(), table->name());
+      return RC::SCHEMA_FIELD_NOT_EXIST;
+    }
 
-  Value value = Value(update.value);
-
-  FilterStmt *filter_stmt = nullptr;
-  rc =
-      FilterStmt::create(db, table, &table_map, const_cast<vector<ConditionSqlNode> &>(update.conditions), filter_stmt);
-  if (rc != RC::SUCCESS) {
-    LOG_WARN("failed to create filter statement. rc=%d:%s", rc, strrc(rc));
-    return rc;
-  }
-
-  if (field_meta->type() != value.attr_type()) {
-    // TODO: 类型转换 (value.cpp)
-    // if (!Value::convert(value.attr_type(), field_meta->type(), value)) {
-    // }
-    if (value.attr_type() == AttrType::NULLS) {
-      // field_meta
-    } else {
-      LOG_WARN("update value cannot convert into target type, src=%s, target=%s",
-                 attr_type_to_string(value.attr_type()), attr_type_to_string(field_meta->type()));
-      return RC::SCHEMA_FIELD_TYPE_MISMATCH;
+    field_metas.push_back(*field_meta);
+    unique_ptr<Expression> exprp(expr);
+    RC rc = binder.bind_expression(exprp, bound_expressions);
+    if (OB_FAIL(rc)) {
+      LOG_INFO("bind expression failed. rc=%s", strrc(rc));
+      return rc;
     }
   }
-
-  // 创建 UpdateStmt 对象
-  Field field = Field(table, field_meta);
-
-  stmt = new UpdateStmt(table, field, value, filter_stmt);
+  unordered_map<string, Table *> table_map   = {{update.relation_name, table}};
+  FilterStmt                    *filter_stmt = nullptr;
+  RC rc = FilterStmt::create(db, table, &table_map, const_cast<vector<ConditionSqlNode> &>(update.conditions), filter_stmt);
+  if (rc != RC::SUCCESS) {
+    LOG_WARN("cannot construct filter stmt");
+    return rc;
+  }
+  stmt = new UpdateStmt(table, std::move(field_metas), std::move(bound_expressions), filter_stmt);
   return RC::SUCCESS;
 }

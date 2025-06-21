@@ -144,15 +144,16 @@ UnboundAggregateExpr *create_aggregate_expression(const char *aggregate_name,
   enum CompOp                                comp;
   enum SysFuncType                           functype;
   RelAttrSqlNode *                           rel_attr;
-  vector<AttrInfoSqlNode> *             attr_infos;
+  vector<AttrInfoSqlNode> *                  attr_infos;
   AttrInfoSqlNode *                          attr_info;
   Expression *                               expression;
-  RelationSqlNode *                            relation;
-  vector<unique_ptr<Expression>> * expression_list;
-  vector<Value> *                       value_list;
-  vector<ConditionSqlNode> *            condition_list;
-  vector<RelAttrSqlNode> *              rel_attr_list;
-  vector<RelationSqlNode> *                 relation_list;
+  RelationSqlNode *                          relation;
+  vector<unique_ptr<Expression>> *           expression_list;
+  vector<UpdateInfoNode>*               update_info_list;
+  vector<Value> *                            value_list;
+  vector<ConditionSqlNode> *                 condition_list;
+  vector<RelAttrSqlNode> *                   rel_attr_list;
+  vector<RelationSqlNode> *                  relation_list;
   char *                                     cstring;
   int                                        number;
   float                                      floats;
@@ -172,7 +173,7 @@ UnboundAggregateExpr *create_aggregate_expression(const char *aggregate_name,
 %type <value>               value
 %type <number>              number
 %type <functype>            sys_func_type
-%type <relation>             relation
+%type <relation>            relation
 %type <cstring>             alias
 %type <comp>                comp_op
 %type <comp>                exists_op
@@ -190,6 +191,7 @@ UnboundAggregateExpr *create_aggregate_expression(const char *aggregate_name,
 %type <expression_list>     expression_list
 %type <expression_list>     group_by
 %type <expression>          sub_query_expr
+%type <update_info_list>    update_list
 %type <sql_node>            calc_stmt
 %type <sql_node>            select_stmt
 %type <sql_node>            insert_stmt
@@ -534,17 +536,32 @@ delete_stmt:    /*  delete 语句的语法解析树*/
     }
     ;
 update_stmt:      /*  update 语句的语法解析树*/
-    UPDATE ID SET ID EQ value where 
+    UPDATE ID SET update_list where 
     {
       $$ = new ParsedSqlNode(SCF_UPDATE);
       context->add_object($$);
       $$->update.relation_name = $2;
-      $$->update.attribute_name = $4;
-      $$->update.value = *$6;
-      if ($7 != nullptr) {
-        $$->update.conditions.swap(*$7);
-        delete $7;
+      $$->update.update_infos = *$4;
+      delete $4;
+      if ($5 != nullptr) {
+        $$->update.conditions.swap(*$5);
+        delete $5;
       }
+      free($2);
+    }
+    ;
+update_list:
+    ID EQ expression COMMA update_list
+    {
+        $$ = $5;
+        $$->emplace_back(string($1), $3);
+        free($1);
+    }
+    | ID EQ expression
+    {
+        $$ = new vector<UpdateInfoNode>();
+        $$->emplace_back(string($1), $3);
+        free($1);
     }
     ;
 select_stmt:        /*  select 语句的语法解析树*/
@@ -655,7 +672,7 @@ expression:
       delete $1;
     }
     | LBRACE value value_list RBRACE  {
-      std::vector<Value> *values = $3;
+      vector<Value> *values = $3;
       values->emplace_back(*$2);
       $$ = new ValueListExpr(*values);
       $$->set_name(token_name(sql_string, &@$));
@@ -947,7 +964,7 @@ int yyerror(YYLTYPE *llocp, const char *sql_string, ParsedSqlResult *sql_result,
 
 int sql_parse(const char *s, ParsedSqlResult *sql_result) {
     yyscan_t scanner;
-    std::vector<char *> allocated_strings;
+    vector<char *> allocated_strings;
     ParseContext context;
 
     yylex_init_extra(static_cast<void*>(&allocated_strings), &scanner);

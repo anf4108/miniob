@@ -1,9 +1,14 @@
+#pragma once
+
 #include "sql/operator/physical_operator.h"
 #include "sql/optimizer/physical_plan_generator.h"
 class UpdatePhysicalOperator : public PhysicalOperator
 {
 public:
-  UpdatePhysicalOperator(Field field, Value value, Table *table) : update_field_(field), value_(value), table_(table) {}
+  UpdatePhysicalOperator(
+      Table *table, std::vector<FieldMeta> field_metas, std::vector<std::unique_ptr<Expression>> exprs)
+      : table_(table), field_metas_(std::move(field_metas)), exprs_(std::move(exprs))
+  {}
 
 private:
   PhysicalOperatorType type() const override { return PhysicalOperatorType::UPDATE; }
@@ -14,16 +19,8 @@ private:
 
   virtual Tuple *current_tuple() override { return nullptr; }
 
-  friend class PhysicalPlanGenerator;
-
 private:
-  RC insert(vector<char>&v, RID& rid);
-  RC insert_all(vector<vector<char>> &v);
-  RC remove_all(const vector<RID>&rids);
-  RC update(vector<char> v, RID &rid);
-
-private:
-  Field update_field_;
-  Value value_;
-  Table *table_;
+  Table                                   *table_ = nullptr;
+  std::vector<FieldMeta>                   field_metas_;
+  std::vector<std::unique_ptr<Expression>> exprs_;
 };

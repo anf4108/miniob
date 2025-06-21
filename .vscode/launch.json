@@ -15,7 +15,8 @@
             "osx": {
                 "MIMode": "lldb",
                 "externalConsole":true
-            }
+            },
+            "preLaunchTask": "build",
         },
         {
             "type": "lldb",

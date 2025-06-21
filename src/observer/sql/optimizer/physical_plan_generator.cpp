@@ -357,18 +357,18 @@ RC PhysicalPlanGenerator::create_plan(DeleteLogicalOperator &delete_oper, unique
   return rc;
 }
 
-RC PhysicalPlanGenerator::create_plan(UpdateLogicalOperator &update_oper, unique_ptr<PhysicalOperator> &oper)
+RC PhysicalPlanGenerator::create_plan(UpdateLogicalOperator &logical_operator, std::unique_ptr<PhysicalOperator> &oper)
 {
-  UpdatePhysicalOperator *op = new UpdatePhysicalOperator(update_oper.update_field(), update_oper.value(), update_oper.table());
-  oper.reset(op);
-  for (auto &child_oper : update_oper.children()) {
-    unique_ptr<PhysicalOperator> child_physical_oper;
-    RC rc = create(*child_oper, child_physical_oper);
-    if (rc != RC::SUCCESS) {
+  oper = std::make_unique<UpdatePhysicalOperator>(
+      logical_operator.table(), logical_operator.field_metas(), std::move(logical_operator.exprs()));
+  auto children = std::move(logical_operator.children());
+  if (!children.empty()) {
+    std::unique_ptr<PhysicalOperator> child_oper;
+    if (RC rc = create(*children[0], child_oper); OB_FAIL(rc)) {
       LOG_WARN("failed to create child physical operator. rc=%s", strrc(rc));
       return rc;
     }
-    op->add_child(std::move(child_physical_oper));
+    oper->add_child(std::move(child_oper));
   }
   return RC::SUCCESS;
 }

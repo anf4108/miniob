@@ -1,18 +1,22 @@
+#pragma once
+
 #include "sql/operator/logical_operator.h"
-#include "storage/field/field.h"
 
 class UpdateLogicalOperator : public LogicalOperator
 {
 public:
-  LogicalOperatorType type() const;
-  UpdateLogicalOperator(Table *table, Field field, Value value);
+  UpdateLogicalOperator(Table *table, std::vector<FieldMeta> field_metas, std::vector<std::unique_ptr<Expression>> expr)
+      : table_(table), field_metas_(std::move(field_metas)), exprs_(std::move(expr))
+  {}
+  virtual ~UpdateLogicalOperator() = default;
 
-  Field &update_field();
-  Value &value();
-  Table *table();
+  LogicalOperatorType                       type() const override { return LogicalOperatorType::UPDATE; }
+  Table                                    *table() const { return table_; }
+  std::vector<FieldMeta>                    field_metas() const { return field_metas_; }
+  std::vector<std::unique_ptr<Expression>> &exprs() { return exprs_; }
 
 private:
-  Field  update_field_;
-  Value  value_;
-  Table *table_;
+  Table                                   *table_;
+  std::vector<FieldMeta>                   field_metas_;
+  std::vector<std::unique_ptr<Expression>> exprs_;
 };
